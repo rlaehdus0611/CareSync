@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>헬스케어 AI</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --mental:   #8b5cf6;
+      --diet:     #10b981;
+      --exercise: #3b82f6;
+      --bg:       #f8fafc;
+      --card:     #ffffff;
+      --text:     #1e293b;
+      --sub:      #94a3b8;
+      --border:   #e2e8f0;
+      --nav-h:    64px;
+      --header-h: 56px;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    body { font-family:'Apple SD Gothic Neo','Noto Sans KR',sans-serif; background:var(--bg); color:var(--text); height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+
+    /* ── 상단 헤더 ── */
+    .app-header {
+      height: var(--header-h);
+      background: white;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 1.2rem;
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .app-header h1 { font-size:1rem; font-weight:700; display:flex; align-items:center; gap:0.4rem; }
+    .agent-dots { display:flex; gap:0.35rem; }
+    .agent-dot { width:8px; height:8px; border-radius:50%; background:#e2e8f0; transition:background 0.3s; }
+    .agent-dot.online { background:#34d399; }
+
+    /* ── 페이지 컨테이너 ── */
+    .pages { flex:1; overflow:hidden; position:relative; }
+    .page { position:absolute; inset:0; overflow-y:auto; display:none; flex-direction:column; }
+    .page.active { display:flex; }
+
+    /* ── 하단 네비 ── */
+    .bottom-nav {
+      height: var(--nav-h);
+      background: white;
+      border-top: 1px solid var(--border);
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:0.25rem; border:none; background:none; cursor:pointer;
+      font-size:0.68rem; color:var(--sub); font-weight:500;
+      transition:color 0.15s;
+    }
+    .nav-btn .icon { font-size:1.4rem; transition:transform 0.15s; }
+    .nav-btn.active { color:var(--mental); }
+    .nav-btn.active .icon { transform:scale(1.15); }
+
+    /* ════════════════════════════════
+       대시보드
+    ════════════════════════════════ */
+    #page-dashboard { padding:1rem; gap:0.9rem; background:var(--bg); }
+
+    .greeting-card {
+      background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+      border-radius:16px; padding:1.2rem 1.3rem; color:white;
+    }
+    .greeting-card h2 { font-size:1.05rem; font-weight:700; margin-bottom:0.2rem; }
+    .greeting-card p  { font-size:0.82rem; opacity:0.85; }
+
+    .stat-row { display:grid; grid-template-columns:repeat(3,1fr); gap:0.7rem; }
+    .stat-card {
+      background:white; border-radius:14px; padding:0.9rem 0.7rem;
+      text-align:center; box-shadow:0 1px 6px rgba(0,0,0,0.05);
+    }
+    .stat-card .num { font-size:1.4rem; font-weight:800; }
+    .stat-card .lbl { font-size:0.7rem; color:var(--sub); margin-top:0.15rem; }
+    .stat-card.mental   .num { color:var(--mental); }
+    .stat-card.diet     .num { color:var(--diet); }
+    .stat-card.exercise .num { color:var(--exercise); }
+
+    .section-title { font-size:0.82rem; font-weight:700; color:var(--sub); letter-spacing:0.05em; padding:0.2rem 0; }
+
+    .chart-card { background:white; border-radius:16px; padding:1.1rem; box-shadow:0 1px 6px rgba(0,0,0,0.05); }
+    .chart-card h3 { font-size:0.88rem; font-weight:700; margin-bottom:0.8rem; }
+
+    .recent-list { display:flex; flex-direction:column; gap:0.6rem; }
+    .recent-item {
+      background:white; border-radius:12px; padding:0.8rem 1rem;
+      box-shadow:0 1px 4px rgba(0,0,0,0.04);
+      display:flex; align-items:center; gap:0.8rem;
+    }
+    .recent-icon { font-size:1.4rem; }
+    .recent-body { flex:1; }
+    .recent-body .tag { font-size:0.7rem; font-weight:600; }
+    .recent-body .tag.mental   { color:var(--mental); }
+    .recent-body .tag.diet     { color:var(--diet); }
+    .recent-body .tag.exercise { color:var(--exercise); }
+    .recent-body .preview { font-size:0.82rem; color:#64748b; margin-top:0.1rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:220px; }
+    .recent-time { font-size:0.7rem; color:var(--sub); }
+
+    /* ════════════════════════════════
+       채팅
+    ════════════════════════════════ */
+    #page-chat { display:flex; flex-direction:column; background:var(--bg); }
+
+    /* 에이전트 선택 탭 */
+    .agent-tabs {
+      background:white; border-bottom:1px solid var(--border);
+      display:flex; padding:0.5rem 0.8rem; gap:0.4rem;
+      flex-shrink:0; overflow-x:auto;
+    }
+    .agent-tabs::-webkit-scrollbar { display:none; }
+    .agent-tab {
+      padding:0.4rem 0.9rem; border-radius:20px; border:none;
+      font-size:0.8rem; font-weight:600; cursor:pointer;
+      white-space:nowrap;
+      background:#f1f5f9; color:var(--sub);
+      transition:all 0.15s;
+    }
+    .agent-tab.active[data-agent="all"]      { background:#f1f0ff; color:var(--mental); }
+    .agent-tab.active[data-agent="mental"]   { background:#ede9fe; color:var(--mental); }
+    .agent-tab.active[data-agent="diet"]     { background:#d1fae5; color:var(--diet); }
+    .agent-tab.active[data-agent="exercise"] { background:#dbeafe; color:var(--exercise); }
+
+    /* 채팅 메시지 영역 */
+    #chatBox {
+      flex:1; overflow-y:auto; padding:1rem;
+      display:flex; flex-direction:column; gap:0.85rem;
+    }
+
+    .msg-wrap { display:flex; flex-direction:column; gap:0.4rem; }
+    .msg-wrap.user { align-items:flex-end; }
+    .msg-wrap.ai   { align-items:flex-start; }
+
+    .bubble {
+      max-width:78%; padding:0.7rem 1rem;
+      border-radius:18px; font-size:0.88rem; line-height:1.65;
+    }
+    .user .bubble {
+      background:linear-gradient(135deg,var(--mental),var(--exercise));
+      color:white; border-bottom-right-radius:4px;
+    }
+    .ai .bubble {
+      background:white; color:var(--text);
+      border-bottom-left-radius:4px;
+      box-shadow:0 1px 5px rgba(0,0,0,0.07);
+    }
+
+    /* 라우팅 알림 */
+    .route-notice {
+      display:flex; align-items:center; gap:0.4rem;
+      font-size:0.72rem; color:var(--sub); padding:0.1rem 0;
+    }
+    .route-badge {
+      padding:0.15rem 0.55rem; border-radius:20px; font-size:0.7rem; font-weight:700;
+    }
+    .route-badge.mental   { background:#ede9fe; color:var(--mental); }
+    .route-badge.diet     { background:#d1fae5; color:var(--diet); }
+    .route-badge.exercise { background:#dbeafe; color:var(--exercise); }
+
+    /* 에이전트 응답 카드 */
+    .agent-card {
+      max-width:82%; background:white; border-radius:14px;
+      padding:0.9rem 1rem; box-shadow:0 1px 5px rgba(0,0,0,0.07);
+      font-size:0.86rem; line-height:1.65;
+    }
+    .agent-card-header {
+      font-size:0.72rem; font-weight:700; margin-bottom:0.5rem;
+      display:flex; align-items:center; gap:0.5rem;
+    }
+    .emotion-chip {
+      background:#ede9fe; color:var(--mental);
+      padding:0.12rem 0.55rem; border-radius:20px; font-size:0.7rem;
+    }
+    .agent-card.unavailable { opacity:0.45; }
+
+    /* 로딩 */
+    .typing { display:flex; gap:4px; align-items:center; padding:0.2rem 0; }
+    .typing span {
+      width:7px; height:7px; border-radius:50%; background:#cbd5e1;
+      animation:bounce 1.1s infinite;
+    }
+    .typing span:nth-child(2){animation-delay:.18s}
+    .typing span:nth-child(3){animation-delay:.36s}
+    @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+    /* 입력창 */
+    .chat-input-wrap {
+      background:white; border-top:1px solid var(--border);
+      padding:0.7rem 0.9rem; display:flex; gap:0.6rem; align-items:flex-end;
+      flex-shrink:0;
+    }
+    textarea#chatInput {
+      flex:1; border:1.5px solid var(--border); border-radius:22px;
+      padding:0.6rem 1rem; font-size:0.88rem; font-family:inherit;
+      resize:none; max-height:100px; background:var(--bg);
+      transition:border-color 0.2s; line-height:1.5;
+    }
+    textarea#chatInput:focus { outline:none; border-color:var(--mental); background:white; }
+    #sendBtn {
+      width:40px; height:40px; border-radius:50%; border:none;
+      background:linear-gradient(135deg,var(--mental),var(--exercise));
+      color:white; font-size:1rem; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; transition:opacity 0.2s;
+    }
+    #sendBtn:disabled { opacity:0.4; cursor:not-allowed; }
+
+    /* 빠른 질문 칩 */
+    .quick-chips {
+      display:flex; gap:0.4rem; overflow-x:auto; padding:0.5rem 0.9rem 0;
+      flex-shrink:0;
+    }
+    .quick-chips::-webkit-scrollbar { display:none; }
+    .qchip {
+      background:white; border:1px solid var(--border); border-radius:20px;
+      padding:0.35rem 0.8rem; font-size:0.75rem; color:#475569;
+      cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0;
+    }
+    .qchip:hover { border-color:var(--mental); color:var(--mental); background:#f5f3ff; }
+
+    /* 웰컴 */
+    .chat-welcome {
+      flex:1; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:0.5rem;
+      padding:2rem 1rem; text-align:center; color:var(--sub);
+    }
+    .chat-welcome .big { font-size:2.5rem; }
+    .chat-welcome h2 { font-size:0.95rem; color:#64748b; font-weight:600; }
+    .chat-welcome p  { font-size:0.8rem; }
+
+    /* ════════════════════════════════
+       기록
+    ════════════════════════════════ */
+    #page-history { padding:1rem; gap:0.7rem; background:var(--bg); }
+    .filter-row { display:flex; gap:0.4rem; overflow-x:auto; padding-bottom:0.2rem; }
+    .filter-btn {
+      padding:0.35rem 0.9rem; border-radius:20px; border:1.5px solid var(--border);
+      font-size:0.78rem; font-weight:600; cursor:pointer; background:white;
+      color:var(--sub); white-space:nowrap; transition:all 0.15s;
+    }
+    .filter-btn.active { border-color:var(--mental); background:#f5f3ff; color:var(--mental); }
+    .history-card {
+      background:white; border-radius:14px; padding:1rem;
+      box-shadow:0 1px 4px rgba(0,0,0,0.05);
+    }
+    .history-card .hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem; }
+    .history-card .htag { font-size:0.72rem; font-weight:700; }
+    .history-card .htag.mental   { color:var(--mental); }
+    .history-card .htag.diet     { color:var(--diet); }
+    .history-card .htag.exercise { color:var(--exercise); }
+    .history-card .htime { font-size:0.7rem; color:var(--sub); }
+    .history-card .hcontent { font-size:0.85rem; color:#475569; line-height:1.6; }
+    .history-card .hresponse {
+      margin-top:0.6rem; padding:0.6rem 0.8rem;
+      background:var(--bg); border-radius:10px;
+      font-size:0.8rem; color:#64748b; line-height:1.6;
+    }
+    .emotion-row { display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.5rem; }
+    .ekw { background:#ede9fe; color:var(--mental); padding:0.12rem 0.55rem; border-radius:20px; font-size:0.72rem; }
+
+    .empty-state { text-align:center; padding:3rem 1rem; color:var(--sub); font-size:0.85rem; }
+  </style>
+</head>
+<body>
+
+<!-- 헤더 -->
+<header class="app-header">
+  <h1>🏥 헬스케어 AI</h1>
+  <div class="agent-dots">
+    <div class="agent-dot" id="dot-mental"   title="멘탈"></div>
+    <div class="agent-dot" id="dot-diet"     title="식단"></div>
+    <div class="agent-dot" id="dot-exercise" title="운동"></div>
+  </div>
+</header>
+
+<!-- 페이지 -->
+<div class="pages">
+
+  <!-- ── 대시보드 ── -->
+  <div class="page active" id="page-dashboard">
+    <div class="greeting-card">
+      <h2 id="greetingText">안녕하세요 👋</h2>
+      <p>오늘 하루도 건강하게 시작해봐요</p>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat-card mental">
+        <div class="num" id="stat-mental">—</div>
+        <div class="lbl">멘탈 기록</div>
+      </div>
+      <div class="stat-card diet">
+        <div class="num" id="stat-diet">—</div>
+        <div class="lbl">식단 기록</div>
+      </div>
+      <div class="stat-card exercise">
+        <div class="num" id="stat-exercise">—</div>
+        <div class="lbl">운동 기록</div>
+      </div>
+    </div>
+
+    <div class="section-title">📈 감정 추이 (7일)</div>
+    <div class="chart-card">
+      <canvas id="dashChart" height="140"></canvas>
+      <p id="noChartMsg" style="text-align:center;font-size:0.82rem;color:var(--sub);padding:1.5rem 0;display:none">
+        아직 기록이 없어요. 첫 일기를 써볼까요? 🌱
+      </p>
+    </div>
+
+    <div class="section-title">🕐 최근 활동</div>
+    <div class="recent-list" id="recentList">
+      <div class="empty-state">활동 기록이 없어요</div>
+    </div>
+  </div>
+
+  <!-- ── 채팅 ── -->
+  <div class="page" id="page-chat">
+    <!-- 에이전트 선택 탭 -->
+    <div class="agent-tabs" id="agentTabs">
+      <button class="agent-tab active" data-agent="all"      onclick="selectAgent(this)">🔀 자동 선택</button>
+      <button class="agent-tab"        data-agent="mental"   onclick="selectAgent(this)">🧠 멘탈</button>
+      <button class="agent-tab"        data-agent="diet"     onclick="selectAgent(this)">🥗 식단</button>
+      <button class="agent-tab"        data-agent="exercise" onclick="selectAgent(this)">💪 운동</button>
+    </div>
+
+    <!-- 메시지 영역 -->
+    <div id="chatBox">
+      <div class="chat-welcome" id="chatWelcome">
+        <div class="big">💬</div>
+        <h2>무엇이든 편하게 물어보세요</h2>
+        <p>에이전트를 선택하거나, 자동으로 맡겨보세요</p>
+      </div>
+    </div>
+
+    <!-- 빠른 질문 -->
+    <div class="quick-chips">
+      <div class="qchip" onclick="quickSend(this)">😔 오늘 너무 힘들어</div>
+      <div class="qchip" onclick="quickSend(this)">🍱 점심 추천해줘</div>
+      <div class="qchip" onclick="quickSend(this)">💪 운동 루틴 알려줘</div>
+      <div class="qchip" onclick="quickSend(this)">😮‍💨 스트레스받아서 폭식했어</div>
+      <div class="qchip" onclick="quickSend(this)">😞 우울한데 뭐하면 좋을까</div>
+    </div>
+
+    <!-- 입력창 -->
+    <div class="chat-input-wrap">
+      <textarea id="chatInput" rows="1" placeholder="메시지를 입력하세요..."
+        oninput="autoResize(this)"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage()}">
+      </textarea>
+      <button id="sendBtn" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+
+  <!-- ── 기록 ── -->
+  <div class="page" id="page-history">
+    <div class="filter-row">
+      <button class="filter-btn active" data-filter="all"      onclick="filterHistory(this)">전체</button>
+      <button class="filter-btn"        data-filter="mental"   onclick="filterHistory(this)">🧠 멘탈</button>
+      <button class="filter-btn"        data-filter="diet"     onclick="filterHistory(this)">🥗 식단</button>
+      <button class="filter-btn"        data-filter="exercise" onclick="filterHistory(this)">💪 운동</button>
+    </div>
+    <div id="historyList">
+      <div class="empty-state">아직 기록이 없어요 🌱</div>
+    </div>
+  </div>
+</div>
+
+<!-- 하단 네비 -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" data-page="dashboard" onclick="navigate(this)">
+    <span class="icon">📊</span>대시보드
+  </button>
+  <button class="nav-btn" data-page="chat" onclick="navigate(this)">
+    <span class="icon">💬</span>채팅
+  </button>
+  <button class="nav-btn" data-page="history" onclick="navigate(this)">
+    <span class="icon">📋</span>기록
+  </button>
+</nav>
+
+<script>
+// ── 상태 ─────────────────────────────────────────────────────────
+let selectedAgent = 'all';
+let allHistory    = [];
+let dashChart     = null;
+
+const AGENT_LABELS = { mental:'🧠 멘탈', diet:'🥗 식단', exercise:'💪 운동' };
+const EMOTION_COLORS = {
+  기쁨:'#f59e0b',슬픔:'#3b82f6',불안:'#f97316',
+  분노:'#ef4444',무기력:'#94a3b8',외로움:'#a78bfa',평온:'#34d399',혼란:'#ec4899'
+};
+
+// ── 네비게이션 ────────────────────────────────────────────────────
+function navigate(btn) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const page = btn.dataset.page;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'history')   renderHistory('all');
+}
+
+// ── 에이전트 탭 ───────────────────────────────────────────────────
+function selectAgent(btn) {
+  document.querySelectorAll('.agent-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedAgent = btn.dataset.agent;
+  const input = document.getElementById('chatInput');
+  const hints = {
+    all:      '메시지를 입력하세요...',
+    mental:   '감정이나 일기를 자유롭게 적어보세요',
+    diet:     '식단, 음식, 영양에 대해 물어보세요',
+    exercise: '운동, 체력, 루틴에 대해 물어보세요',
+  };
+  input.placeholder = hints[selectedAgent];
+}
+
+// ── 채팅 ─────────────────────────────────────────────────────────
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function quickSend(el) {
+  const text = el.textContent.replace(/^.{2}/, '').trim();
+  document.getElementById('chatInput').value = text;
+  sendMessage();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const msg   = input.value.trim();
+  if (!msg) return;
+
+  document.getElementById('chatWelcome')?.remove();
+  input.value = ''; input.style.height = 'auto';
+  document.getElementById('sendBtn').disabled = true;
+
+  appendUserBubble(msg);
+  const loadEl = appendTyping();
+
+  try {
+    const body = { message: msg };
+    if (selectedAgent !== 'all') body.force_agent = selectedAgent;
+
+    const res  = await fetch('/chat', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    loadEl.remove();
+    renderChatResult(data);
+    loadDashboard();
+  } catch(e) {
+    loadEl.remove();
+    appendAiBubble('서버 연결 오류가 발생했어요 😢');
+  } finally {
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+
+function appendUserBubble(msg) {
+  const box = document.getElementById('chatBox');
+  const el  = document.createElement('div');
+  el.className = 'msg-wrap user';
+  el.innerHTML = `<div class="bubble">${esc(msg)}</div>`;
+  box.appendChild(el); scrollBottom();
+}
+
+function appendAiBubble(text) {
+  const box = document.getElementById('chatBox');
+  const el  = document.createElement('div');
+  el.className = 'msg-wrap ai';
+  el.innerHTML = `<div class="bubble">${esc(text)}</div>`;
+  box.appendChild(el); scrollBottom();
+}
+
+function appendTyping() {
+  const box = document.getElementById('chatBox');
+  const el  = document.createElement('div');
+  el.className = 'msg-wrap ai';
+  el.innerHTML = `<div class="bubble" style="padding:0.6rem 1rem"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  box.appendChild(el); scrollBottom(); return el;
+}
+
+function renderChatResult(data) {
+  const box = document.getElementById('chatBox');
+
+  // 라우팅 표시
+  const badges = data.routed_to.map(a =>
+    `<span class="route-badge ${a}">${AGENT_LABELS[a]}</span>`
+  ).join('');
+  const notice = document.createElement('div');
+  notice.className = 'msg-wrap ai';
+  notice.innerHTML = `<div class="route-notice">→ ${badges}</div>`;
+  box.appendChild(notice);
+
+  // 각 에이전트 응답
+  for (const r of data.results) {
+    const card = document.createElement('div');
+    card.className = 'msg-wrap ai';
+
+    if (r.status !== 'ok') {
+      card.innerHTML = `<div class="agent-card unavailable">
+        <div class="agent-card-header">${AGENT_LABELS[r.agent] || r.agent} · 연결 안됨</div>
+        <div style="font-size:0.78rem;color:var(--sub)">${esc(r.error||'')}</div>
+      </div>`;
+    } else if (r.agent === 'mental' && r.response) {
+      const em = r.response.emotions || {};
+      const kw = (r.response.keywords||[]).map(k=>`<span class="ekw">${k}</span>`).join('');
+      card.innerHTML = `<div class="agent-card">
+        <div class="agent-card-header" style="color:var(--mental)">
+          🧠 멘탈
+          ${em.primary ? `<span class="emotion-chip">${em.primary} ${em.intensity}/10</span>` : ''}
+        </div>
+        <div>${esc(r.response.empathy_response||'')}</div>
+        ${kw ? `<div class="emotion-row" style="margin-top:0.6rem">${kw}</div>` : ''}
+      </div>`;
+    } else {
+      const text = r.response?.response || r.response?.recommendation || JSON.stringify(r.response);
+      card.innerHTML = `<div class="agent-card">
+        <div class="agent-card-header" style="color:var(--${r.agent})">${AGENT_LABELS[r.agent]||r.agent}</div>
+        <div>${esc(text)}</div>
+      </div>`;
+    }
+    box.appendChild(card);
+  }
+  scrollBottom();
+
+  // 기록에 추가
+  for (const r of data.results) {
+    if (r.status === 'ok') allHistory.unshift({ agent: r.agent, response: r.response, time: new Date() });
+  }
+}
+
+// ── 대시보드 ──────────────────────────────────────────────────────
+async function loadDashboard() {
+  // 인사말
+  const h = new Date().getHours();
+  const greet = h < 6 ? '야심한 밤이네요 🌙' : h < 12 ? '좋은 아침이에요 ☀️' : h < 18 ? '안녕하세요 👋' : '수고하셨어요 🌆';
+  document.getElementById('greetingText').textContent = greet;
+
+  // 멘탈 기록 가져오기
+  try {
+    const res   = await fetch('/journals?limit=30');
+    const { entries } = await res.json();
+
+    document.getElementById('stat-mental').textContent   = entries.length;
+    document.getElementById('stat-diet').textContent     = '—';
+    document.getElementById('stat-exercise').textContent = '—';
+
+    // 차트
+    renderDashChart(entries);
+
+    // 최근 활동
+    renderRecent(entries.slice(0, 5));
+  } catch {
+    document.getElementById('stat-mental').textContent = '—';
+  }
+}
+
+function renderDashChart(entries) {
+  const canvas  = document.getElementById('dashChart');
+  const noMsg   = document.getElementById('noChartMsg');
+  if (!entries.length) { noMsg.style.display=''; canvas.style.display='none'; return; }
+  noMsg.style.display='none'; canvas.style.display='';
+
+  const labels     = entries.slice(0,7).reverse().map(e => e.created_at.slice(5,10));
+  const intensities= entries.slice(0,7).reverse().map(e => e.intensity);
+  const pointColors= entries.slice(0,7).reverse().map(e => EMOTION_COLORS[e.emotions?.primary]||'#8b5cf6');
+
+  if (dashChart) dashChart.destroy();
+  dashChart = new Chart(canvas, {
+    type:'line',
+    data:{
+      labels,
+      datasets:[{
+        label:'감정 강도',
+        data: intensities,
+        borderColor:'#8b5cf6',
+        backgroundColor:'rgba(139,92,246,0.08)',
+        borderWidth:2.5,
+        pointRadius:5,
+        pointBackgroundColor: pointColors,
+        tension:0.35, fill:true
+      }]
+    },
+    options:{
+      responsive:true,
+      plugins:{ legend:{display:false} },
+      scales:{
+        y:{ min:0, max:10, ticks:{stepSize:2}, grid:{color:'#f1f5f9'} },
+        x:{ grid:{display:false} }
+      }
+    }
+  });
+}
+
+function renderRecent(entries) {
+  const list = document.getElementById('recentList');
+  if (!entries.length) { list.innerHTML='<div class="empty-state">활동 기록이 없어요</div>'; return; }
+  list.innerHTML = entries.map(e => {
+    const time = new Date(e.created_at).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const preview = e.content.slice(0, 40) + (e.content.length > 40 ? '…' : '');
+    return `<div class="recent-item">
+      <div class="recent-icon">🧠</div>
+      <div class="recent-body">
+        <div class="tag mental">멘탈 · ${e.emotions?.primary||''} ${e.intensity}/10</div>
+        <div class="preview">${esc(preview)}</div>
+      </div>
+      <div class="recent-time">${time}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 기록 ─────────────────────────────────────────────────────────
+async function renderHistory(filter) {
+  const list = document.getElementById('historyList');
+  try {
+    const res   = await fetch('/journals?limit=50');
+    const { entries } = await res.json();
+    const filtered = filter === 'all' ? entries : entries.filter(e => e._agent === filter || filter === 'mental');
+
+    if (!filtered.length) { list.innerHTML='<div class="empty-state">기록이 없어요 🌱</div>'; return; }
+    list.innerHTML = filtered.map(e => {
+      const time = new Date(e.created_at).toLocaleString('ko-KR');
+      const kw   = (e.keywords||[]).map(k=>`<span class="ekw">${k}</span>`).join('');
+      return `<div class="history-card">
+        <div class="hdr">
+          <span class="htag mental">🧠 멘탈 · ${e.emotions?.primary||''}</span>
+          <span class="htime">${time}</span>
+        </div>
+        <div class="hcontent">${esc(e.content.slice(0,120))}${e.content.length>120?'…':''}</div>
+        ${kw ? `<div class="emotion-row">${kw}</div>` : ''}
+        <div class="hresponse">${esc(e.empathy_response?.slice(0,120)||'')}…</div>
+      </div>`;
+    }).join('');
+  } catch {
+    list.innerHTML='<div class="empty-state">데이터를 불러오지 못했어요</div>';
+  }
+}
+
+function filterHistory(btn) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistory(btn.dataset.filter);
+}
+
+// ── 에이전트 상태 ─────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const res = await fetch('/agents/health');
+    const { agents } = await res.json();
+    for (const a of agents) {
+      const dot = document.getElementById('dot-' + a.agent);
+      if (dot) dot.className = 'agent-dot' + (a.status==='online'?' online':'');
+    }
+  } catch {}
+}
+
+// ── 유틸 ─────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+function scrollBottom() {
+  const b = document.getElementById('chatBox'); b.scrollTop = b.scrollHeight;
+}
+
+// ── 초기화 ────────────────────────────────────────────────────────
+loadDashboard();
+checkHealth();
+setInterval(checkHealth, 15000);
+</script>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>멘탈 저널링 에이전트</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      background: #f0f4f8;
+      color: #2d3748;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header span { font-size: 1.8rem; }
+    header small { font-size: 0.8rem; opacity: 0.8; display: block; margin-top: 2px; }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+      display: grid;
+      gap: 1.5rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #4a5568;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 140px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem;
+      font-size: 0.95rem;
+      font-family: inherit;
+      resize: vertical;
+      transition: border-color 0.2s;
+      line-height: 1.6;
+    }
+    textarea:focus { outline: none; border-color: #667eea; }
+    textarea::placeholder { color: #a0aec0; }
+
+    button#submitBtn {
+      margin-top: 1rem;
+      width: 100%;
+      padding: 0.85rem;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    button#submitBtn:hover { opacity: 0.92; }
+    button#submitBtn:active { transform: scale(0.99); }
+    button#submitBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .loading {
+      display: none;
+      text-align: center;
+      color: #667eea;
+      padding: 1rem;
+      font-size: 0.9rem;
+    }
+    .loading.show { display: block; }
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #667eea;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 0.5rem;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* 결과 패널 */
+    #resultPanel { display: none; }
+    #resultPanel.show { display: block; }
+
+    .emotion-badge {
+      display: inline-block;
+      padding: 0.3rem 0.9rem;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .primary-emotion {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #667eea;
+      margin-bottom: 0.5rem;
+    }
+
+    .intensity-bar {
+      height: 10px;
+      background: #e2e8f0;
+      border-radius: 5px;
+      overflow: hidden;
+      margin: 0.5rem 0;
+    }
+    .intensity-fill {
+      height: 100%;
+      border-radius: 5px;
+      transition: width 0.8s ease;
+    }
+
+    .empathy-box {
+      background: linear-gradient(135deg, #f7f3ff, #f0f4ff);
+      border-left: 4px solid #667eea;
+      border-radius: 0 12px 12px 0;
+      padding: 1.2rem 1.5rem;
+      line-height: 1.8;
+      font-size: 0.95rem;
+      color: #4a5568;
+    }
+
+    .keywords {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .keyword-tag {
+      background: #eef2ff;
+      color: #667eea;
+      padding: 0.25rem 0.75rem;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      font-weight: 500;
+    }
+
+    .emotion-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+    }
+    .emotion-item {
+      text-align: center;
+      padding: 0.6rem;
+      background: #f7fafc;
+      border-radius: 10px;
+      font-size: 0.78rem;
+    }
+    .emotion-item .score {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    /* 히스토리 & 트렌드 */
+    .tab-bar {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .tab {
+      padding: 0.4rem 1rem;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.85rem;
+      font-weight: 500;
+      cursor: pointer;
+      background: #e2e8f0;
+      color: #4a5568;
+      transition: all 0.15s;
+    }
+    .tab.active { background: #667eea; color: white; }
+
+    .history-list { display: flex; flex-direction: column; gap: 0.8rem; }
+    .history-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1rem;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .history-item:hover { border-color: #667eea; }
+    .history-item .meta {
+      font-size: 0.78rem;
+      color: #a0aec0;
+      margin-bottom: 0.3rem;
+    }
+    .history-item .excerpt {
+      font-size: 0.88rem;
+      color: #4a5568;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    canvas { max-height: 240px; }
+
+    /* 멀티에이전트 신호 */
+    .signal-card {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.2rem;
+      border-radius: 12px;
+      background: #f0fff4;
+      border: 1px solid #c6f6d5;
+    }
+    .signal-card.warn { background: #fff5f5; border-color: #fed7d7; }
+    .signal-icon { font-size: 1.8rem; }
+    .signal-text { font-size: 0.88rem; color: #4a5568; line-height: 1.5; }
+    .signal-text strong { color: #2d3748; }
+
+    @media (max-width: 600px) {
+      .emotion-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <span>🧠</span>
+  <div>
+    <h1>멘탈 저널링 에이전트</h1>
+    <small>Healthcare AI · 감정 분석 · 공감 응답</small>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- 일기 입력 -->
+  <div class="card">
+    <h2>📝 오늘의 일기</h2>
+    <textarea id="journalInput"
+      placeholder="오늘 하루 어땠나요? 자유롭게 적어보세요.&#10;감정, 사건, 생각 — 무엇이든 괜찮아요."></textarea>
+    <button id="submitBtn" onclick="submitJournal()">분석하기</button>
+    <div class="loading" id="loading">
+      <span class="spinner"></span> AI가 감정을 분석하고 있어요...
+    </div>
+  </div>
+
+  <!-- 결과 -->
+  <div class="card" id="resultPanel">
+    <h2>💜 분석 결과</h2>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.5rem; margin-bottom:1.5rem;">
+      <div>
+        <div style="font-size:0.8rem;color:#a0aec0;margin-bottom:0.3rem;">주요 감정</div>
+        <div class="primary-emotion" id="primaryEmotion">—</div>
+        <div style="font-size:0.8rem;color:#a0aec0;margin-bottom:0.2rem;">감정 강도 <span id="intensityVal">0</span>/10</div>
+        <div class="intensity-bar">
+          <div class="intensity-fill" id="intensityFill" style="width:0%"></div>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:0.8rem;color:#a0aec0;margin-bottom:0.5rem;">감정 요약</div>
+        <div id="emotionSummary" style="font-size:0.88rem;color:#4a5568;line-height:1.6;"></div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1.2rem;">
+      <div style="font-size:0.8rem;color:#a0aec0;margin-bottom:0.5rem;">핵심 키워드</div>
+      <div class="keywords" id="keywords"></div>
+    </div>
+
+    <div class="emotion-grid" id="emotionGrid"></div>
+
+    <div style="margin-top:1.5rem;">
+      <div style="font-size:0.8rem;color:#a0aec0;margin-bottom:0.5rem;">💬 상담사의 한마디</div>
+      <div class="empathy-box" id="empathyResponse"></div>
+    </div>
+
+    <div style="margin-top:1.5rem;" id="agentSignalBox"></div>
+  </div>
+
+  <!-- 히스토리 & 트렌드 -->
+  <div class="card">
+    <h2>📊 감정 기록</h2>
+    <div class="tab-bar">
+      <button class="tab active" onclick="showTab('trend')">감정 추이</button>
+      <button class="tab" onclick="showTab('history')">일기 목록</button>
+    </div>
+
+    <div id="tabTrend">
+      <canvas id="trendChart"></canvas>
+      <p id="noTrendMsg" style="text-align:center;color:#a0aec0;font-size:0.88rem;padding:2rem 0;display:none;">
+        아직 기록된 감정 데이터가 없어요. 첫 번째 일기를 작성해보세요! 🌱
+      </p>
+    </div>
+
+    <div id="tabHistory" style="display:none;">
+      <div class="history-list" id="historyList">
+        <p style="text-align:center;color:#a0aec0;font-size:0.88rem;padding:2rem 0;">
+          아직 일기가 없어요. 첫 번째 일기를 써볼까요? 🌱
+        </p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const EMOTION_COLORS = {
+  기쁨: '#f6c90e', 슬픔: '#4299e1', 불안: '#ed8936',
+  분노: '#e53e3e', 무기력: '#a0aec0', 외로움: '#9f7aea',
+  평온: '#48bb78', 혼란: '#ed64a6'
+};
+const INTENSITY_COLORS = [
+  '#48bb78','#68d391','#f6e05e','#f6ad55','#fc8181','#e53e3e'
+];
+
+let trendChart = null;
+
+// ── 일기 제출 ────────────────────────────────────────────────────
+
+async function submitJournal() {
+  const content = document.getElementById('journalInput').value.trim();
+  if (!content) { alert('일기 내용을 입력해주세요.'); return; }
+
+  setLoading(true);
+  try {
+    const res = await fetch('/journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+    renderResult(data);
+    loadTrend();
+    loadHistory();
+  } catch (e) {
+    alert('오류가 발생했어요: ' + e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+function setLoading(on) {
+  document.getElementById('submitBtn').disabled = on;
+  document.getElementById('loading').className = 'loading' + (on ? ' show' : '');
+}
+
+// ── 결과 렌더링 ──────────────────────────────────────────────────
+
+function renderResult(data) {
+  const panel = document.getElementById('resultPanel');
+  panel.className = 'card show';
+
+  const em = data.emotions;
+  const color = EMOTION_COLORS[em.primary] || '#667eea';
+
+  document.getElementById('primaryEmotion').textContent = em.primary;
+  document.getElementById('primaryEmotion').style.color = color;
+
+  const intensity = em.intensity;
+  document.getElementById('intensityVal').textContent = intensity;
+  const fill = document.getElementById('intensityFill');
+  fill.style.width = (intensity * 10) + '%';
+  const ci = Math.min(Math.floor(intensity / 2), 5);
+  fill.style.background = INTENSITY_COLORS[ci];
+
+  document.getElementById('emotionSummary').textContent = em.summary;
+
+  const kw = document.getElementById('keywords');
+  kw.innerHTML = data.keywords.map(k =>
+    `<span class="keyword-tag">${k}</span>`
+  ).join('');
+
+  const grid = document.getElementById('emotionGrid');
+  grid.innerHTML = Object.entries(em.scores).map(([name, score]) =>
+    `<div class="emotion-item">
+      <div class="score" style="color:${EMOTION_COLORS[name]||'#667eea'}">${score}</div>
+      <div>${name}</div>
+    </div>`
+  ).join('');
+
+  document.getElementById('empathyResponse').textContent = data.empathy_response;
+
+  // 멀티에이전트 신호
+  const sig = data.agent_signal;
+  const sigBox = document.getElementById('agentSignalBox');
+  if (sig.requires_care) {
+    sigBox.innerHTML = `<div class="signal-card warn">
+      <div class="signal-icon">⚠️</div>
+      <div class="signal-text">
+        <strong>멀티에이전트 케어 신호 발송</strong><br>
+        감정 강도 ${sig.intensity}/10 — 식단·운동 에이전트에 가벼운 케어 활동을 요청했어요.
+      </div>
+    </div>`;
+  } else {
+    sigBox.innerHTML = `<div class="signal-card">
+      <div class="signal-icon">✅</div>
+      <div class="signal-text">
+        <strong>정상 신호</strong><br>
+        감정 상태가 안정적이에요. 다른 에이전트와 일반 모드로 연동 중이에요.
+      </div>
+    </div>`;
+  }
+
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── 탭 전환 ──────────────────────────────────────────────────────
+
+function showTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tabTrend').style.display = tab === 'trend' ? '' : 'none';
+  document.getElementById('tabHistory').style.display = tab === 'history' ? '' : 'none';
+}
+
+// ── 트렌드 차트 ──────────────────────────────────────────────────
+
+async function loadTrend() {
+  const res = await fetch('/trend?days=14');
+  const { data } = await res.json();
+
+  const noMsg = document.getElementById('noTrendMsg');
+  const canvas = document.getElementById('trendChart');
+
+  if (!data.length) { noMsg.style.display = ''; canvas.style.display = 'none'; return; }
+  noMsg.style.display = 'none'; canvas.style.display = '';
+
+  const labels = data.map(d => d.date);
+  const intensities = data.map(d => d.intensity);
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: '감정 강도',
+        data: intensities,
+        borderColor: '#667eea',
+        backgroundColor: 'rgba(102,126,234,0.1)',
+        borderWidth: 2.5,
+        pointRadius: 5,
+        pointBackgroundColor: data.map(d => EMOTION_COLORS[d.emotions.primary] || '#667eea'),
+        tension: 0.35,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const d = data[ctx.dataIndex];
+              return [`강도: ${d.intensity}/10`, `감정: ${d.emotions.primary}`];
+            }
+          }
+        }
+      },
+      scales: {
+        y: { min: 0, max: 10, ticks: { stepSize: 2 }, grid: { color: '#f0f4f8' } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+}
+
+// ── 히스토리 ────────────────────────────────────────────────────
+
+async function loadHistory() {
+  const res = await fetch('/journals?limit=20');
+  const { entries } = await res.json();
+  const list = document.getElementById('historyList');
+
+  if (!entries.length) return;
+  list.innerHTML = entries.map(e => {
+    const date = new Date(e.created_at).toLocaleString('ko-KR');
+    const color = EMOTION_COLORS[e.emotions.primary] || '#667eea';
+    return `<div class="history-item">
+      <div class="meta">${date}</div>
+      <div style="margin-bottom:0.3rem;">
+        <span class="emotion-badge" style="background:${color}20;color:${color}">
+          ${e.emotions.primary} · ${e.intensity}/10
+        </span>
+        ${e.keywords.map(k => `<span class="keyword-tag">${k}</span>`).join('')}
+      </div>
+      <div class="excerpt">${e.content}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 초기 로드 ────────────────────────────────────────────────────
+
+loadTrend();
+loadHistory();
+</script>
+
+</body>
+</html>

@@ -1,33 +1,64 @@
-# repository-exercise
-GitHub Repository 실습용 레포지토리 입니다.
+# 🏥 CareSync — 헬스케어 멀티 에이전트 AI
+
+> 자연어처리 팀 프로젝트 | 멘탈 저널링 · 식단 · 운동 통합 AI 시스템
 
 ---
 
-1. `feature/introduce` 브랜치를 생성합니다.
+## 팀원 & 역할
 
-2. `2025-09-25-[본인의 학번]` 으로 폴더를 생성하고, 해당 폴더 안에 README.md 파일을 생성합니다.
+| 이름 | 에이전트 | 폴더 | 포트 | 발표 파트 |
+|------|---------|------|------|---------|
+| 임예원 | 🧠 멘탈 저널링 | `mental_journal_agent/` | 8000 | PPT 총괄 |
+| 조우현 | 🥗 식단 최적화 | `diet_agent/` | 8001 | 사업화 모델 |
+| 김도연 | 💪 운동 최적화 | `exercise_agent/` | 8002 | SWOT 분석 |
+| 이채현 | 🔀 통합 오케스트레이터 + UI | `orchestrator/` | 9000 | 시장성 분석 |
 
-3. 아래 템플릿에 맞춰 작성 후 파일을 저장합니다. 
+---
 
-```markdown
-#### Contributor
-- 이름(학과/전공): 관심있는 분야 또는 취미, 자기소개 등 자유롭게 작성
+## 핵심 일정
 
-#### Info
+| 날짜 | 내용 | 담당 |
+|------|------|------|
+| **~6/3 (수)** | 에이전트 개발 완료 | 예원·도연·우현 |
+| **~6/5 (금)** | 통합 시스템 + UI 완성 | 채현 |
+| **~6/8 (월)** | PPT 완성 | 전체 |
+| **6/12 (금)** | 발표 | 전체 |
 
-GitHub 사용경험? ([x] 하면 체크됩니다.)
-- [ ] 처음 사용
-- [ ] 조금 사용
-- [ ] 자주 사용
+---
 
-가장 기억에 남는 내용과 그 이유는? 
-- 
+## 프로젝트 구조
 
 ```
-
-4. 다음과 같이 메시지를 작성해 커밋합니다.
+caresync/
+├── mental_journal_agent/   # 임예원
+├── diet_agent/             # 조우현
+├── exercise_agent/         # 김도연
+├── orchestrator/           # 이채현
+└── docs/
+    └── API_SPEC.md         # ← 반드시 읽기!
 ```
-feat: README.md 파일 생성
+
+---
+
+## 브랜치 전략
+
+```
+main              ← PR 머지만 (직접 푸시 금지)
+feature/mental    ← 임예원
+feature/diet      ← 조우현
+feature/exercise  ← 김도연
+feature/integrate ← 이채현
 ```
 
-5. 원격 저장소에 반영 확인 후, Pull-Request 를 생성합니다. 
+---
+
+## 시작하기
+
+```bash
+git clone https://github.com/Lim-yewon/repository-exercise.git caresync
+cd caresync
+git checkout feature/본인브랜치
+```
+
+> **⚠️ 중요:** `.env` 파일은 절대 커밋하지 마세요. `.env.example`만 올리세요.
+> 에이전트 API 스펙은 반드시 `docs/API_SPEC.md`를 따르세요.
