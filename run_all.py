@@ -8,7 +8,7 @@ def run_all():
     
     # 각 에이전트별 실행 정보 (포트: mental=8000, diet=8001, exercise=8002, orchestrator=9000)
     tasks = [
-        {"name": "Mental Agent",   "cmd": [sys.executable, "main.py"], "cwd": "mental_journal_agent/mental_journal_agent"},
+        {"name": "Mental Agent",   "cmd": [sys.executable, "main.py"], "cwd": "mental_journal_agent"},
         {"name": "Diet Agent",     "cmd": [sys.executable, "main.py"], "cwd": "diet_agent"},
         {"name": "Exercise Agent", "cmd": [sys.executable, "-m", "uvicorn", "app.main:app", "--port", "8002", "--host", "0.0.0.0"], "cwd": "exercise_agent"},
         {"name": "Orchestrator",   "cmd": [sys.executable, "main.py"], "cwd": "orchestrator"},
@@ -28,8 +28,9 @@ def run_all():
             p = subprocess.Popen(task['cmd'], cwd=cwd_path)
             processes.append(p)
             
-            # 서버 간 충돌 방지 및 출력 가독성을 위한 짧은 대기
-            time.sleep(2)
+            # Mental Agent는 KoNLPy(Java) 초기화 시간이 필요하므로 더 오래 대기
+            wait_time = 5 if task['name'] == "Mental Agent" else 2
+            time.sleep(wait_time)
         
         print("\n" + "="*60)
         print("모든 서비스가 성공적으로 시작되었습니다!")

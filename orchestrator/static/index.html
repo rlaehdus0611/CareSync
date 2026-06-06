@@ -39,15 +39,19 @@
     /* ── 페이지 컨테이너 ── */
     .pages { flex:1; overflow:hidden; position:relative; }
     .page { position:absolute; inset:0; overflow-y:auto; display:none; flex-direction:column; }
-    .page.active { display:flex; }
+    .page.active { display:flex; z-index: 1; }
 
     /* ── 하단 네비 ── */
     .bottom-nav {
       height: var(--nav-h);
       background: white;
       border-top: 1px solid var(--border);
-      display: grid; grid-template-columns: repeat(3, 1fr);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr) !important;
       flex-shrink: 0;
+      z-index: 1000;
+      padding-bottom: env(safe-area-inset-bottom);
+      height: calc(var(--nav-h) + env(safe-area-inset-bottom));
     }
     .nav-btn {
       display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -200,6 +204,11 @@
       resize:none; max-height:100px; background:var(--bg);
       transition:border-color 0.2s; line-height:1.5;
     }
+    textarea#chatInput::placeholder {
+      color: var(--sub);
+      opacity: 0.7;
+      font-size: 0.85rem;
+    }
     textarea#chatInput:focus { outline:none; border-color:var(--mental); background:white; }
     #sendBtn {
       width:40px; height:40px; border-radius:50%; border:none;
@@ -212,8 +221,12 @@
 
     /* 빠른 질문 칩 */
     .quick-chips {
-      display:flex; gap:0.4rem; overflow-x:auto; padding:0.5rem 0.9rem 0;
+      display:flex; gap:0.4rem; overflow-x:auto; padding:0.5rem 0.9rem 0.3rem;
       flex-shrink:0;
+      flex-wrap: nowrap;
+      white-space: nowrap;
+      -webkit-overflow-scrolling: touch; /* 모바일 부드러운 스크롤 */
+      cursor: grab;
     }
     .quick-chips::-webkit-scrollbar { display:none; }
     .qchip {
@@ -221,6 +234,7 @@
       padding:0.35rem 0.8rem; font-size:0.75rem; color:#475569;
       cursor:pointer; white-space:nowrap; transition:all 0.15s; flex-shrink:0;
     }
+    .qchip:active { cursor: grabbing; }
     .qchip:hover { border-color:var(--mental); color:var(--mental); background:#f5f3ff; }
 
     /* 웰컴 */
@@ -236,8 +250,27 @@
     /* ════════════════════════════════
        기록
     ════════════════════════════════ */
-    #page-history { padding:1rem; gap:0.7rem; background:var(--bg); }
-    .filter-row { display:flex; gap:0.4rem; overflow-x:auto; padding-bottom:0.2rem; }
+    #page-history { 
+  padding: 0; 
+      background: var(--bg); 
+      display: flex; 
+      flex-direction: column; 
+  overflow: hidden;
+}
+#historyList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1rem 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+    }
+    .filter-row { 
+      display:flex; gap:0.4rem; overflow-x:auto; 
+  padding: 1.2rem 1rem 0.8rem;
+  background: var(--bg);
+  flex-shrink: 0;
+    }
     .filter-btn {
       padding:0.35rem 0.9rem; border-radius:20px; border:1.5px solid var(--border);
       font-size:0.78rem; font-weight:600; cursor:pointer; background:white;
@@ -247,13 +280,25 @@
     .history-card {
       background:white; border-radius:14px; padding:1rem;
       box-shadow:0 1px 4px rgba(0,0,0,0.05);
+      position: relative;
     }
     .history-card .hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem; }
+    .history-card .hdr-left { display:flex; align-items:center; gap:0.5rem; }
     .history-card .htag { font-size:0.72rem; font-weight:700; }
     .history-card .htag.mental   { color:var(--mental); }
     .history-card .htag.diet     { color:var(--diet); }
     .history-card .htag.exercise { color:var(--exercise); }
     .history-card .htime { font-size:0.7rem; color:var(--sub); }
+    .history-card .btn-delete {
+      border: none;
+      background: none;
+      color: var(--sub);
+      font-size: 0.9rem;
+      cursor: pointer;
+      padding: 0.2rem;
+      margin-left: 0.5rem;
+      line-height: 1;
+    }
     .history-card .hcontent { font-size:0.85rem; color:#475569; line-height:1.6; }
     .history-card .hresponse {
       margin-top:0.6rem; padding:0.6rem 0.8rem;
@@ -264,6 +309,59 @@
     .ekw { background:#ede9fe; color:var(--mental); padding:0.12rem 0.55rem; border-radius:20px; font-size:0.72rem; }
 
     .empty-state { text-align:center; padding:3rem 1rem; color:var(--sub); font-size:0.85rem; }
+
+    /* ── 프로필 양식 ── */
+    #page-profile { background: var(--bg); }
+    .profile-section { padding: 1.2rem; display: flex; flex-direction: column; gap: 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-group label { font-size: 0.75rem; font-weight: 700; color: var(--sub); }
+    .form-group input, .form-group select { 
+      padding: 0.7rem; border: 1px solid var(--border); border-radius: 12px; 
+      font-size: 0.9rem; font-family: inherit; background: white;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+    
+    .btn-save-profile {
+      margin-top: 1rem;
+      padding: 0.8rem;
+      background: var(--mental);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* ── 토스트 알림 ── */
+    .toast {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      background: rgba(30, 41, 59, 0.9); color: white; padding: 0.7rem 1.5rem;
+      border-radius: 25px; font-size: 0.85rem; z-index: 2000;
+      opacity: 0; visibility: hidden; transition: all 0.3s ease;
+    }
+    .toast.show { opacity: 1; visibility: visible; top: 30px; }
+
+    /* ── 삭제 확인 모달 ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+      display: none; align-items: center; justify-content: center; z-index: 3000;
+      backdrop-filter: blur(2px);
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: white; width: 85%; max-width: 320px; border-radius: 20px;
+      padding: 1.5rem; text-align: center; transform: scale(0.9); transition: transform 0.2s;
+    }
+    .modal-overlay.show .modal { transform: scale(1); }
+    .modal h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+    .modal p { font-size: 0.85rem; color: var(--sub); margin-bottom: 1.5rem; }
+    .modal-btns { display: flex; gap: 0.7rem; }
+    .modal-btn {
+      flex: 1; padding: 0.7rem; border-radius: 12px; border: none;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-cancel { background: var(--bg); color: var(--text); }
+    .btn-confirm { background: #ef4444; color: white; }
   </style>
 </head>
 <body>
@@ -357,14 +455,79 @@
 
   <!-- ── 기록 ── -->
   <div class="page" id="page-history">
+    <!-- 고정 필터 탭 -->
     <div class="filter-row">
       <button class="filter-btn active" data-filter="all"      onclick="filterHistory(this)">전체</button>
       <button class="filter-btn"        data-filter="mental"   onclick="filterHistory(this)">🧠 멘탈</button>
       <button class="filter-btn"        data-filter="diet"     onclick="filterHistory(this)">🥗 식단</button>
       <button class="filter-btn"        data-filter="exercise" onclick="filterHistory(this)">💪 운동</button>
     </div>
+    <!-- 스크롤 가능한 기록 리스트 -->
     <div id="historyList">
       <div class="empty-state">아직 기록이 없어요 🌱</div>
+    </div>
+  </div>
+
+  <!-- ── 프로필 ── -->
+  <div class="page" id="page-profile">
+    <!-- 하단 바에 가려지지 않도록 패딩 추가 -->
+    <div class="profile-section" style="padding-bottom: 80px;">
+      <div class="section-title">👤 신체 정보</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>나이</label>
+          <input type="number" id="p-age" placeholder="예: 25">
+        </div>
+        <div class="form-group">
+          <label>성별</label>
+          <select id="p-gender">
+            <option value="">선택 안함</option>
+            <option value="남성">남성</option>
+            <option value="여성">여성</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>키 (cm)</label>
+          <input type="number" id="p-height" placeholder="175.5">
+        </div>
+        <div class="form-group">
+          <label>몸무게 (kg)</label>
+          <input type="number" id="p-weight" placeholder="70.2">
+        </div>
+      </div>
+      
+      <div class="section-title" style="margin-top:0.5rem">🎯 목표 및 취향</div>
+      <div class="form-group">
+        <label>건강 목표</label>
+        <select id="p-goal">
+          <option value="체중 유지">체중 유지</option>
+          <option value="체중 감량">체중 감량</option>
+          <option value="체지방 감량">체지방 감량</option>
+          <option value="근육량 증가">근육량 증가</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>활동량</label>
+        <select id="p-activity">
+          <option value="보통 활동">보통 활동</option>
+          <option value="거의 운동 안 함">거의 운동 안 함</option>
+          <option value="가벼운 활동">가벼운 활동</option>
+          <option value="활동 많음">활동 많음</option>
+          <option value="매우 활동적">매우 활동적</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>선호 식단 스타일</label>
+        <input type="text" id="p-foodStyle" placeholder="예: 한식 위주, 저탄고지">
+      </div>
+      <div class="form-group">
+        <label>제한 음식 / 알레르기</label>
+        <input type="text" id="p-restrictions" placeholder="예: 견과류, 오이 못먹음">
+      </div>
+
+      <button class="btn-save-profile" onclick="saveProfileWithAlert()">정보 저장하기</button>
     </div>
   </div>
 </div>
@@ -380,7 +543,25 @@
   <button class="nav-btn" data-page="history" onclick="navigate(this)">
     <span class="icon">📋</span>기록
   </button>
+  <button class="nav-btn" id="nav-profile" data-page="profile" onclick="navigate(this)">
+    <span class="icon">👤</span>프로필
+  </button>
 </nav>
+
+<!-- 토스트 알림 요소 -->
+<div id="toast" class="toast">저장되었습니다!</div>
+
+<!-- 삭제 모달 -->
+<div id="deleteModal" class="modal-overlay">
+  <div class="modal">
+    <h3>기록 삭제</h3>
+    <p>이 기록을 정말 삭제하시겠습니까?<br>삭제된 데이터는 복구할 수 없습니다.</p>
+    <div class="modal-btns">
+      <button class="modal-btn btn-cancel" onclick="closeDeleteModal()">취소</button>
+      <button class="modal-btn btn-confirm" id="confirmDeleteBtn">삭제</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ── 상태 ─────────────────────────────────────────────────────────
@@ -445,7 +626,17 @@ async function sendMessage() {
   const loadEl = appendTyping();
 
   try {
-    const body = { message: msg };
+    const body = { 
+      message: msg,
+      age: parseInt(document.getElementById('p-age').value) || null,
+      gender: document.getElementById('p-gender').value || null,
+      height_cm: parseFloat(document.getElementById('p-height').value) || null,
+      weight_kg: parseFloat(document.getElementById('p-weight').value) || null,
+      goal: document.getElementById('p-goal').value || null,
+      activity_level: document.getElementById('p-activity').value || null,
+      food_style: document.getElementById('p-foodStyle').value || null,
+      restrictions: document.getElementById('p-restrictions').value || null
+    };
     if (selectedAgent !== 'all') body.force_agent = selectedAgent;
 
     const res  = await fetch('/chat', {
@@ -534,8 +725,12 @@ function renderChatResult(data) {
 
   // 기록에 추가
   for (const r of data.results) {
-    if (r.status === 'ok') allHistory.unshift({ agent: r.agent, response: r.response, time: new Date() });
+    if (r.status === 'ok') {
+      allHistory.unshift({ agent: r.agent, id: r.response.id || Date.now(), response: r.response, time: new Date().toISOString() });
+    }
   }
+  // 로컬 저장소에 보관 (새로고침 시 유지)
+  localStorage.setItem('caresync_chat_history', JSON.stringify(allHistory.slice(0, 50)));
 }
 
 // ── 대시보드 ──────────────────────────────────────────────────────
@@ -545,17 +740,26 @@ async function loadDashboard() {
   const greet = h < 6 ? '야심한 밤이네요 🌙' : h < 12 ? '좋은 아침이에요 ☀️' : h < 18 ? '안녕하세요 👋' : '수고하셨어요 🌆';
   document.getElementById('greetingText').textContent = greet;
 
-  // 멘탈 기록 가져오기
+  // 전체 기록 가져오기 (통계용)
   try {
-    const res   = await fetch('/journals?limit=30');
+    const res   = await fetch('/journals?limit=100');
     const { entries } = await res.json();
 
-    document.getElementById('stat-mental').textContent   = entries.length;
-    document.getElementById('stat-diet').textContent     = '—';
-    document.getElementById('stat-exercise').textContent = '—';
+    // 에이전트별 정확한 카운트 계산
+    const counts = { mental: 0, diet: 0, exercise: 0 };
+    entries.forEach(e => {
+      const ag = e._agent || 'mental';
+      if (counts[ag] !== undefined) counts[ag]++;
+    });
 
-    // 차트
-    renderDashChart(entries);
+    document.getElementById('stat-mental').textContent   = counts.mental;
+    document.getElementById('stat-diet').textContent     = counts.diet;
+    document.getElementById('stat-exercise').textContent = counts.exercise;
+
+    // 차트 데이터 (추이 엔드포인트 활용)
+    const trendRes = await fetch('/trend?days=7');
+    const trendData = await trendRes.json();
+    renderDashChart(trendData.data || []);
 
     // 최근 활동
     renderRecent(entries.slice(0, 5));
@@ -564,15 +768,35 @@ async function loadDashboard() {
   }
 }
 
-function renderDashChart(entries) {
+function renderDashChart(trendData) {
   const canvas  = document.getElementById('dashChart');
   const noMsg   = document.getElementById('noChartMsg');
-  if (!entries.length) { noMsg.style.display=''; canvas.style.display='none'; return; }
+  
+  if (!trendData || trendData.length === 0) { noMsg.style.display=''; canvas.style.display='none'; return; }
   noMsg.style.display='none'; canvas.style.display='';
 
-  const labels     = entries.slice(0,7).reverse().map(e => e.created_at.slice(5,10));
-  const intensities= entries.slice(0,7).reverse().map(e => e.intensity);
-  const pointColors= entries.slice(0,7).reverse().map(e => EMOTION_COLORS[e.emotions?.primary]||'#8b5cf6');
+  // trendData: [{date: "06-01", avg_intensity: 5, primary_emotion: "기쁨"}, ...]
+  // 부족한 날짜를 채워 7일 고정 그래프 생성
+  const labels = [];
+  const intensities = [];
+  const pointColors = [];
+  
+  const now = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    labels.push(dateStr);
+
+    const dayData = trendData.find(t => t.date.includes(dateStr));
+    if (dayData) {
+      intensities.push(dayData.avg_intensity);
+      pointColors.push(EMOTION_COLORS[dayData.primary_emotion] || '#8b5cf6');
+    } else {
+      intensities.push(0); // 데이터가 없는 날은 0으로 표시하여 선이 이어지게 함
+      pointColors.push('#cbd5e1');
+    }
+  }
 
   if (dashChart) dashChart.destroy();
   dashChart = new Chart(canvas, {
@@ -587,7 +811,8 @@ function renderDashChart(entries) {
         borderWidth:2.5,
         pointRadius:5,
         pointBackgroundColor: pointColors,
-        tension:0.35, fill:true
+        tension:0.35, fill:true,
+        spanGaps: true
       }]
     },
     options:{
@@ -604,13 +829,22 @@ function renderDashChart(entries) {
 function renderRecent(entries) {
   const list = document.getElementById('recentList');
   if (!entries.length) { list.innerHTML='<div class="empty-state">활동 기록이 없어요</div>'; return; }
+  
+  const icons = { mental: '🧠', diet: '🥗', exercise: '💪' };
+
   list.innerHTML = entries.map(e => {
+    const agent = e._agent || 'mental';
     const time = new Date(e.created_at).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-    const preview = e.content.slice(0, 40) + (e.content.length > 40 ? '…' : '');
+    const preview = (e.content || '').slice(0, 40) + ((e.content || '').length > 40 ? '…' : '');
+    const icon = icons[agent] || '❓';
+    
+    let tagContent = AGENT_LABELS[agent];
+    if (agent === 'mental') tagContent += ` · ${e.emotions?.primary || ''} ${e.intensity}/10`;
+
     return `<div class="recent-item">
-      <div class="recent-icon">🧠</div>
+      <div class="recent-icon">${icon}</div>
       <div class="recent-body">
-        <div class="tag mental">멘탈 · ${e.emotions?.primary||''} ${e.intensity}/10</div>
+        <div class="tag ${agent}">${tagContent}</div>
         <div class="preview">${esc(preview)}</div>
       </div>
       <div class="recent-time">${time}</div>
@@ -621,34 +855,119 @@ function renderRecent(entries) {
 // ── 기록 ─────────────────────────────────────────────────────────
 async function renderHistory(filter) {
   const list = document.getElementById('historyList');
-  try {
-    const res   = await fetch('/journals?limit=50');
-    const { entries } = await res.json();
-    const filtered = filter === 'all' ? entries : entries.filter(e => e._agent === filter || filter === 'mental');
 
-    if (!filtered.length) { list.innerHTML='<div class="empty-state">기록이 없어요 🌱</div>'; return; }
-    list.innerHTML = filtered.map(e => {
-      const time = new Date(e.created_at).toLocaleString('ko-KR');
-      const kw   = (e.keywords||[]).map(k=>`<span class="ekw">${k}</span>`).join('');
-      return `<div class="history-card">
-        <div class="hdr">
-          <span class="htag mental">🧠 멘탈 · ${e.emotions?.primary||''}</span>
-          <span class="htime">${time}</span>
-        </div>
-        <div class="hcontent">${esc(e.content.slice(0,120))}${e.content.length>120?'…':''}</div>
-        ${kw ? `<div class="emotion-row">${kw}</div>` : ''}
-        <div class="hresponse">${esc(e.empathy_response?.slice(0,120)||'')}…</div>
-      </div>`;
-    }).join('');
-  } catch {
-    list.innerHTML='<div class="empty-state">데이터를 불러오지 못했어요</div>';
+  // 1. 서버에서 통합 기록(멘탈, 식단 등) 가져오기
+  let serverHistory = [];
+  try {
+    const res = await fetch('/journals?limit=30');
+    const data = await res.json();
+    serverHistory = data.entries.map(e => {
+      // 에이전트별 데이터 구조 통일
+      const agent = e._agent || 'mental';
+      return {
+        agent: agent,
+        id: e.id,
+        response: agent === 'mental' ? {
+          empathy_response: e.empathy_response,
+          keywords: e.keywords,
+          emotions: e.emotions
+        } : { response: e.response },
+        time: e.created_at
+      };
+    });
+  } catch(e) {}
+
+  // 2. 로컬 데이터(서버에 반영되기 전의 최근 기록)와 병합 및 중복 제거 처리
+  const combined = [...serverHistory].sort((a,b) => new Date(b.time) - new Date(a.time));
+
+  // 3. 필터링
+  const filtered = filter === 'all' ? combined : combined.filter(e => e.agent === filter);
+
+  if (!filtered.length) { 
+    list.innerHTML = '<div class="empty-state">해당 카테고리의 기록이 없어요 🌱</div>'; 
+    return; 
   }
+
+  list.innerHTML = filtered.map((e, idx) => {
+    const d = new Date(e.time);
+    const timeStr = d.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    let contentHtml = '';
+    let tagLabel = AGENT_LABELS[e.agent] || e.agent;
+
+    if (e.agent === 'mental') {
+      const res = e.response;
+      const kw = (res.keywords || []).map(k => `<span class="ekw">${k}</span>`).join('');
+      tagLabel += ` · ${res.emotions?.primary || ''}`;
+      contentHtml = `
+        <div class="hcontent">${esc(res.empathy_response || '')}</div>
+        ${kw ? `<div class="emotion-row">${kw}</div>` : ''}
+      `;
+    } else {
+      // 식단 또는 운동 응답 처리
+      let text = "";
+      if (typeof e.response === 'string') {
+        text = e.response;
+      } else if (e.response?.response) {
+        text = e.response.response;
+      } else if (e.response?.recommendation) {
+        text = Array.isArray(e.response.recommendation) ? e.response.recommendation.join(", ") : e.response.recommendation;
+      }
+      contentHtml = `<div class="hcontent">${esc(text)}</div>`;
+    }
+
+    return `
+      <div class="history-card" style="margin-bottom:0.8rem">
+        <div class="hdr">
+          <div class="hdr-left">
+            <span class="htag ${e.agent}">${tagLabel}</span>
+            <span class="htime">${timeStr}</span>
+          </div>
+          <button class="btn-delete" onclick="openDeleteModal('${e.agent}', ${e.id}, '${e.time}')">✕</button>
+        </div>
+        ${contentHtml}
+      </div>`;
+  }).join('');
 }
 
 function filterHistory(btn) {
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   renderHistory(btn.dataset.filter);
+}
+
+let deleteTarget = null;
+function openDeleteModal(agent, id, timeId) {
+  deleteTarget = { agent, id, timeId };
+  document.getElementById('deleteModal').classList.add('show');
+  document.getElementById('confirmDeleteBtn').onclick = deleteHistoryItem;
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').classList.remove('show');
+  deleteTarget = null;
+}
+
+async function deleteHistoryItem() {
+  if(!deleteTarget) return;
+  const { agent, id, timeId } = deleteTarget;
+  
+  try {
+    // 1. 서버 DB에서 삭제 요청
+    const res = await fetch(`/journals/${agent}/${id}`, { method: 'DELETE' });
+    
+    // 2. 로컬 상태 업데이트
+    allHistory = allHistory.filter(h => h.time !== timeId);
+    localStorage.setItem('caresync_chat_history', JSON.stringify(allHistory));
+    
+    showToast("기록이 삭제되었습니다.");
+    closeDeleteModal();
+    
+    // 3. UI 갱신
+    renderHistory(document.querySelector('.filter-btn.active').dataset.filter);
+    loadDashboard();
+  } catch (e) {
+    showToast("삭제 중 오류가 발생했습니다.");
+  }
 }
 
 // ── 에이전트 상태 ─────────────────────────────────────────────────
@@ -671,7 +990,56 @@ function scrollBottom() {
   const b = document.getElementById('chatBox'); b.scrollTop = b.scrollHeight;
 }
 
+// ── 프로필 저장/로드 ──────────────────────────────────────────────
+function saveProfile() {
+  const profile = {
+    age: document.getElementById('p-age').value,
+    gender: document.getElementById('p-gender').value,
+    height: document.getElementById('p-height').value,
+    weight: document.getElementById('p-weight').value,
+    goal: document.getElementById('p-goal').value,
+    activity: document.getElementById('p-activity').value,
+    foodStyle: document.getElementById('p-foodStyle').value,
+    restrictions: document.getElementById('p-restrictions').value
+  };
+  localStorage.setItem('caresync_profile', JSON.stringify(profile));
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}
+
+function saveProfileWithAlert() {
+  saveProfile();
+  showToast("정보가 안전하게 저장되었습니다! ✨");
+}
+
+function loadProfile() {
+  const saved = localStorage.getItem('caresync_profile');
+  if (saved) {
+    const p = JSON.parse(saved);
+    document.getElementById('p-age').value = p.age || '';
+    document.getElementById('p-gender').value = p.gender || '';
+    document.getElementById('p-height').value = p.height || '';
+    document.getElementById('p-weight').value = p.weight || '';
+    document.getElementById('p-goal').value = p.goal || '체중 유지';
+    document.getElementById('p-activity').value = p.activity || '보통 활동';
+    document.getElementById('p-foodStyle').value = p.foodStyle || '';
+    document.getElementById('p-restrictions').value = p.restrictions || '';
+  }
+}
+
+function initHistory() {
+  const saved = localStorage.getItem('caresync_chat_history');
+  if (saved) allHistory = JSON.parse(saved);
+}
+
 // ── 초기화 ────────────────────────────────────────────────────────
+initHistory();
+loadProfile();
 loadDashboard();
 checkHealth();
 setInterval(checkHealth, 15000);

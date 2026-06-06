@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import sqlite3
 from datetime import datetime
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
@@ -8,11 +11,43 @@ from pydantic import BaseModel, Field
 
 from app.exercise_agent import MentalStatus, recommend_exercise
 
+DB_PATH = os.path.join(os.path.dirname(__file__), "exercise_history.db")
+
+# ── 데이터베이스 로직 ──────────────────────────────────────────────
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS exercise_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT,
+                response TEXT,
+                created_at DATETIME
+            )
+        """)
+
+def save_history(content: str, response: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO exercise_history (content, response, created_at) VALUES (?, ?, ?)",
+            (content, response, datetime.now().isoformat())
+        )
+
+def delete_history(entry_id: int):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute("DELETE FROM exercise_history WHERE id = ?", (entry_id,))
+        return cursor.rowcount > 0
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
+
 
 app = FastAPI(
     title="CareSync Exercise Agent",
     description="Exercise optimization agent for CareSync multi-agent healthcare AI.",
     version="0.1.0",
+    lifespan=lifespan
 )
 
 
@@ -274,6 +309,21 @@ async def agent_status() -> dict[str, object]:
         "recorded_at": datetime.now().isoformat(timespec="seconds"),
     }
 
+@app.get("/journals")
+async def list_history(limit: int = 20):
+    """저장된 운동 추천 기록 조회."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute("SELECT * FROM exercise_history ORDER BY created_at DESC LIMIT ?", (limit,))
+        return {"entries": [dict(row) for row in cursor.fetchall()]}
+
+@app.delete("/journals/{entry_id}")
+async def remove_history(entry_id: int):
+    """운동 기록 삭제."""
+    if not delete_history(entry_id):
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+    return {"status": "ok"}
+
 
 @app.post("/exercise", response_model=ExerciseResponse)
 async def exercise(request: ExerciseRequest) -> ExerciseResponse:
@@ -289,6 +339,8 @@ async def exercise(request: ExerciseRequest) -> ExerciseResponse:
         if status
         else None,
     )
+
+    save_history(request.content, recommendation.response)
 
     return ExerciseResponse(
         response=recommendation.response,

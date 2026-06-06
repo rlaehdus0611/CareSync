@@ -3,8 +3,10 @@
 """
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
+import os
 
 load_dotenv()
+from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -12,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from agent import process_journal
-from database import init_db, save_entry, get_entries, get_emotion_trend, get_recent_for_rag
+from database import init_db, save_entry, get_entries, get_emotion_trend, get_recent_for_rag, delete_entry
 
 
 @asynccontextmanager
@@ -22,7 +24,21 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="멘탈 저널링 에이전트", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+static_path = os.path.join(BASE_DIR, "static")
+
+if not os.path.exists(static_path):
+    os.makedirs(static_path)
+app.mount("/static", StaticFiles(directory=static_path), name="static")
 
 
 # ── 요청/응답 스키마 ──────────────────────────────────────────────
@@ -44,7 +60,10 @@ class JournalResponse(BaseModel):
 
 @app.get("/")
 async def root():
-    return FileResponse("static/index.html")
+    index_path = os.path.join(static_path, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return {"message": "Mental Agent is running. (index.html missing)"}
 
 
 @app.post("/journal", response_model=JournalResponse)
@@ -75,6 +94,15 @@ async def list_journals(limit: int = 20):
     return {"entries": entries}
 
 
+@app.delete("/journals/{entry_id}")
+async def remove_journal(entry_id: int):
+    """일기 삭제."""
+    success = await delete_entry(entry_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 기록을 찾을 수 없습니다.")
+    return {"status": "ok"}
+
+
 @app.get("/trend")
 async def emotion_trend(days: int = 7):
     """최근 N일 감정 추이 데이터."""
@@ -92,10 +120,16 @@ async def agent_status():
     """
     entries = await get_entries(limit=1)
     if not entries:
-        return {"status": "no_data", "agent_signal": None}
+        return {
+            "agent": "mental_journal",
+            "status": "ok",
+            "sub_status": "no_data",
+            "agent_signal": None
+        }
 
     latest = entries[0]
     return {
+        "agent": "mental_journal",
         "status": "ok",
         "agent_signal": {
             "agent": "mental_journal",
@@ -110,4 +144,5 @@ async def agent_status():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    port = int(os.getenv("MENTAL_AGENT_PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

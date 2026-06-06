@@ -3,6 +3,13 @@
 KoNLPy 미설치 시 regex 기반 폴백으로 자동 전환
 """
 
+import os
+
+# Java 17+ 환경에서 네이티브 접근 경고 방지 및 초기화 최적화
+jdk_opts = os.environ.get("JDK_JAVA_OPTIONS", "")
+if "--enable-native-access=ALL-UNNAMED" not in jdk_opts:
+    os.environ["JDK_JAVA_OPTIONS"] = f"{jdk_opts} --enable-native-access=ALL-UNNAMED".strip()
+
 # KNU 한국어 감정 극성 사전 (핵심 단어 subset)
 EMOTION_LEXICON = {
     "긍정": ["기쁘", "행복", "즐거", "설레", "뿌듯", "감사", "좋", "사랑", "편안", "홀가분"],
@@ -13,12 +20,19 @@ EMOTION_LEXICON = {
 
 try:
     from konlpy.tag import Okt
-    _okt = Okt()
     KONLPY_AVAILABLE = True
 except Exception:
-    _okt = None
     KONLPY_AVAILABLE = False
 
+_okt_instance = None
+
+def get_okt():
+    """Okt 객체를 필요할 때 비로소 생성 (Lazy Initialization)"""
+    global _okt_instance
+    if _okt_instance is None and KONLPY_AVAILABLE:
+        from konlpy.tag import Okt
+        _okt_instance = Okt()
+    return _okt_instance
 
 def preprocess(text: str) -> dict:
     """
@@ -41,7 +55,11 @@ def preprocess(text: str) -> dict:
 
 
 def _konlpy_preprocess(text: str) -> dict:
-    tokens = _okt.pos(text, norm=True, stem=True)
+    okt = get_okt()
+    if not okt:
+        return _fallback_preprocess(text)
+        
+    tokens = okt.pos(text, norm=True, stem=True)
 
     emotion_words = [w for w, pos in tokens if pos in ("Adjective", "Verb") and len(w) > 1]
     nouns = [w for w, pos in tokens if pos == "Noun" and len(w) > 1]

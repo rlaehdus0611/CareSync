@@ -1,19 +1,53 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import requests
 import os
+import sqlite3
+from datetime import datetime
+from contextlib import asynccontextmanager
 
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+DB_PATH = os.path.join(os.path.dirname(__file__), "diet_history.db")
+
+# ── 데이터베이스 로직 ──────────────────────────────────────────────
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS diet_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT,
+                response TEXT,
+                created_at DATETIME
+            )
+        """)
+
+def save_history(content: str, response: str):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO diet_history (content, response, created_at) VALUES (?, ?, ?)",
+            (content, response, datetime.now().isoformat())
+        )
+
+def delete_history(entry_id: int):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute("DELETE FROM diet_history WHERE id = ?", (entry_id,))
+        return cursor.rowcount > 0
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    yield
 
 
 app = FastAPI(
     title="CareSync Diet Agent",
-    description="식단 추천 에이전트 API",
-    version="1.1.0"
+    description="식단 추천 에이전트 API (DB 저장 기능 포함)",
+    version="1.2.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -179,7 +213,7 @@ SYSTEM_PROMPT = """
 9. 저체중 사용자가 체중 감량을 목표로 하면 체중 감량 식단은 제공하지 마세요.
 10. 비만 또는 고도비만 사용자가 체중 유지를 목표로 하면 완만한 감량 방향의 식단을 권장하세요.
 11. 의료 진단, 치료, 약물 처방처럼 말하지 마세요.
-12. 답변은 자연스러운 한국어로 작성하세요.
+12. 답변은 반드시 자연스러운 한국어로 작성하고, 영어를 섞어 쓰지 마세요.
 13. 의미 없는 영어 문자열, 깨진 문자, 자음/모음 반복을 출력하지 마세요.
 
 답변 형식:
@@ -283,10 +317,26 @@ def agent_status():
     }
 
 
+@app.get("/journals")
+def list_history(limit: int = 20):
+    """저장된 식단 추천 기록 조회."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.execute("SELECT * FROM diet_history ORDER BY created_at DESC LIMIT ?", (limit,))
+        return {"entries": [dict(row) for row in cursor.fetchall()]}
+
+@app.delete("/journals/{entry_id}")
+def remove_history(entry_id: int):
+    """식단 기록 삭제."""
+    if not delete_history(entry_id):
+        raise HTTPException(status_code=404, detail="기록을 찾을 수 없습니다.")
+    return {"status": "ok"}
+
+
 @app.post("/diet")
 def diet_recommend(request: DietRequest):
     answer = ask_ollama(request)
-
+    save_history(request.content, answer)
     return {
         "response": answer
     }

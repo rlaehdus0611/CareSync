@@ -78,6 +78,8 @@ async def get_emotion_trend(days: int = 7) -> list[dict]:
     """최근 N일간 날짜별 감정 데이터 반환."""
     import json
     from datetime import timedelta
+    from collections import defaultdict
+
     since = (datetime.now() - timedelta(days=days)).isoformat()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
@@ -89,9 +91,28 @@ async def get_emotion_trend(days: int = 7) -> list[dict]:
             (since,)
         )
         rows = await cursor.fetchall()
-        result = []
+
+        # 날짜별로 그룹화하여 데이터 집계
+        daily_map = defaultdict(list)
         for row in rows:
-            entry = dict(row)
-            entry["emotions"] = json.loads(entry["emotions"])
-            result.append(entry)
+            daily_map[row['date']].append(row)
+
+        result = []
+        for date_str, entries in daily_map.items():
+            avg_intensity = sum(e['intensity'] for e in entries) / len(entries)
+            # 해당 날짜의 가장 마지막 일기의 감정을 대표 감정으로 선택
+            last_entry_emotions = json.loads(entries[-1]['emotions'])
+            result.append({
+                "date": date_str,
+                "avg_intensity": round(avg_intensity, 1),
+                "primary_emotion": last_entry_emotions.get("primary", "평온")
+            })
         return result
+
+
+async def delete_entry(entry_id: int) -> bool:
+    """ID를 기반으로 일기 기록 삭제"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("DELETE FROM journal_entries WHERE id = ?", (entry_id,))
+        await db.commit()
+        return cursor.rowcount > 0

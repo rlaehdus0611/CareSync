@@ -51,6 +51,15 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 class ChatRequest(BaseModel):
     message: str
     force_agent: str | None = None   # "mental" | "diet" | "exercise" | None(자동)
+    # 사용자 프로필 정보 추가 (선택 사항)
+    age: int | None = None
+    gender: str | None = None
+    height_cm: float | None = None
+    weight_kg: float | None = None
+    goal: str | None = None
+    activity_level: str | None = None
+    food_style: str | None = None
+    restrictions: str | None = None
 
 class AgentResult(BaseModel):
     agent: str
@@ -66,12 +75,16 @@ class ChatResponse(BaseModel):
 
 # ── 에이전트 호출 ────────────────────────────────────────────────────
 
-async def call_agent(agent: str, message: str) -> AgentResult:
+async def call_agent(agent: str, message: str, user_info: dict | None = None) -> AgentResult:
     url      = AGENT_URLS[agent] + AGENT_ENDPOINTS[agent]
     payload  = {AGENT_PAYLOAD_KEY[agent]: message}
 
+    # 추가 프로필 정보가 있으면 페이로드에 합침 (식단 에이전트 등에서 활용)
+    if user_info:
+        payload.update(user_info)
+
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=90.0) as client:
             res = await client.post(url, json=payload)
             res.raise_for_status()
             return AgentResult(agent=agent, status="ok", response=res.json())
@@ -100,9 +113,12 @@ async def chat(req: ChatRequest):
         agents  = routing.get("agents", ["mental"])
         reason  = routing.get("reason", "")
 
-    # 2. 해당 에이전트에 동시 요청
+    # 2. 프로필 정보 추출 (제공된 필드만)
+    user_info = req.model_dump(exclude={"message", "force_agent"}, exclude_unset=True)
+
+    # 3. 해당 에이전트에 동시 요청
     results = await asyncio.gather(*[
-        call_agent(agent, req.message) for agent in agents
+        call_agent(agent, req.message, user_info) for agent in agents
     ])
 
     return ChatResponse(routed_to=agents, reason=reason, results=list(results))
@@ -113,7 +129,7 @@ async def agents_health():
     """모든 에이전트 서버 상태 확인."""
     async def ping(agent: str, url: str):
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.get(url + "/agent/status")
             return {"agent": agent, "status": "online"}
         except Exception:
@@ -127,15 +143,44 @@ async def agents_health():
 
 @app.get("/journals")
 async def get_all_journals(limit: int = 20):
-    """멘탈 에이전트로부터 전체 일기 목록을 가져와 반환합니다."""
-    url = f"{AGENT_URLS['mental']}/journals"
+    """모든 에이전트로부터 전체 기록 목록을 가져와 병합하여 반환합니다."""
+    async def fetch_history(agent: str):
+        url = f"{AGENT_URLS[agent]}/journals"
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(url, params={"limit": limit})
+                if resp.status_code == 200:
+                    entries = resp.json().get("entries", [])
+                    for e in entries:
+                        e["_agent"] = agent
+                    return entries
+        except:
+            pass
+        return []
+
+    # 모든 에이전트로부터 병렬로 데이터 가져오기
+    tasks = [fetch_history(agent) for agent in AGENT_URLS.keys()]
+    results = await asyncio.gather(*tasks)
+    
+    # 리스트 병합 및 시간순 정렬
+    combined = [item for sublist in results for item in sublist]
+    combined.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+    return {"entries": combined[:limit]}
+
+@app.delete("/journals/{agent}/{entry_id}")
+async def delete_journal_entry(agent: str, entry_id: int):
+    """특정 에이전트의 기록 삭제 라우팅."""
+    if agent not in AGENT_URLS:
+        return {"status": "error", "message": "유효하지 않은 에이전트입니다."}
+    url = f"{AGENT_URLS[agent]}/journals/{entry_id}"
     async with httpx.AsyncClient(timeout=5.0) as client:
         try:
-            response = await client.get(url, params={"limit": limit})
-            response.raise_for_status()
-            return response.json()
+            resp = await client.delete(url)
+            resp.raise_for_status()
+            return resp.json()
         except Exception as e:
-            return {"entries": [], "error": str(e)}
+            return {"status": "error", "message": str(e)}
 
 
 @app.get("/trend")
