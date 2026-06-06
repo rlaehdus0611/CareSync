@@ -114,7 +114,7 @@ async def agents_health():
     async def ping(agent: str, url: str):
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:
-                await client.get(url + "/docs")
+                await client.get(url + "/agent/status")
             return {"agent": agent, "status": "online"}
         except Exception:
             return {"agent": agent, "status": "offline"}
@@ -123,3 +123,35 @@ async def agents_health():
         ping(a, u) for a, u in AGENT_URLS.items()
     ])
     return {"agents": list(results)}
+
+
+@app.get("/journals")
+async def get_all_journals(limit: int = 20):
+    """멘탈 에이전트로부터 전체 일기 목록을 가져와 반환합니다."""
+    url = f"{AGENT_URLS['mental']}/journals"
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            response = await client.get(url, params={"limit": limit})
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"entries": [], "error": str(e)}
+
+
+@app.get("/trend")
+async def get_emotion_trend(days: int = 7):
+    """멘탈 에이전트로부터 감정 추이 데이터를 가져와 반환합니다."""
+    url = f"{AGENT_URLS['mental']}/trend"
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        try:
+            response = await client.get(url, params={"days": days})
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"days": days, "data": [], "error": str(e)}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    # API 명세서에 따라 오케스트레이터는 9000번 포트에서 실행합니다.
+    uvicorn.run(app, host="0.0.0.0", port=9000)
