@@ -1,13 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import requests
 import os
+from pathlib import Path
 
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+BASE_DIR = Path(__file__).resolve().parent
 
 
 app = FastAPI(
@@ -23,6 +27,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 
 
 class DietRequest(BaseModel):
@@ -272,6 +278,179 @@ def ask_ollama(request: DietRequest) -> str:
     answer = response.json()["message"]["content"]
 
     return clean_response(answer)
+
+
+@app.get("/")
+def root():
+    return FileResponse(BASE_DIR / "static" / "index.html")
+
+
+@app.get("/interaction-preview")
+def interaction_preview():
+    return {
+        "agent": "diet",
+        "purpose": "식단 담당 영역에서 미리 확인하는 멀티 에이전트 연동 화면 예시",
+        "steps": [
+            {
+                "from_agent": "mental",
+                "to_agent": "diet",
+                "title": "멘탈 상태 기반 식단 조정",
+                "summary": "멘탈 에이전트가 스트레스나 폭식 위험을 감지하면 식단 에이전트는 자극적인 음식보다 속이 편한 균형식 중심으로 추천 방향을 조정합니다.",
+                "recommendations": [
+                    "맵고 기름진 음식 줄이기",
+                    "죽, 국, 두부, 바나나처럼 부담 적은 음식 우선",
+                    "굶기보다 소량씩 규칙적으로 먹기"
+                ],
+            },
+            {
+                "from_agent": "mental",
+                "to_agent": "exercise",
+                "title": "멘탈 상태 기반 운동 강도 조정",
+                "summary": "멘탈 에이전트가 피로감, 스트레스, 무기력 정도를 전달하면 운동 에이전트는 고강도 운동보다 회복형 활동을 우선하도록 추천 강도를 조정합니다.",
+                "recommendations": [
+                    "20분 가벼운 걷기",
+                    "목과 어깨 스트레칭 10분",
+                    "숨 고르기나 명상 5분"
+                ],
+            },
+            {
+                "from_agent": "exercise + diet",
+                "to_agent": "orchestrator",
+                "title": "식단과 운동 응답 최종 조율",
+                "summary": "통합 단계에서는 식단과 운동 응답을 함께 보고 식사 리듬 회복과 가벼운 활동을 우선하는 방향으로 최종 결과를 정리합니다.",
+                "recommendations": [
+                    "운동은 가벼운 강도부터 시작하기",
+                    "식사는 거르지 않고 적정량 유지하기",
+                    "자기 전 수분 섭취와 휴식 챙기기"
+                ],
+            },
+        ],
+        "final_summary": "이 화면은 실제 멘탈/운동 에이전트 호출 결과가 아니라, 식단 담당 영역에서 준비해둔 통합 연동 미리보기입니다.",
+    }
+
+
+# ---------------------------------------------------------------------------
+# 오케스트레이터 담당자 참고용: 실제 멀티 에이전트 연동 예시
+# ---------------------------------------------------------------------------
+# 아래 코드는 diet_agent에서 실행하려는 코드가 아니라, 나중에 orchestrator/main.py의
+# /chat 처리 흐름에 붙일 수 있는 참고용 설계 코드입니다.
+#
+# 핵심 아이디어:
+# 1. 오케스트레이터가 기존처럼 mental / diet / exercise 에이전트를 호출합니다.
+# 2. 성공한 응답만 모읍니다.
+# 3. mental 응답의 emotions 또는 agent_signal을 보고 식단/운동 조정 이유를 만듭니다.
+# 4. diet, exercise 응답을 함께 보고 interaction_steps와 final_summary를 만듭니다.
+# 5. 프론트는 interaction_steps가 있으면 카드로 보여주고, 없으면 기존 응답만 보여주면 됩니다.
+#
+# 예시 응답 구조:
+# {
+#   "routed_to": ["mental", "diet", "exercise"],
+#   "reason": "감정+식단+운동 복합 요청",
+#   "results": [...기존 개별 에이전트 응답...],
+#   "interaction_steps": [
+#       {
+#           "from_agent": "mental",
+#           "to_agent": "diet",
+#           "title": "멘탈 상태 기반 식단 조정",
+#           "summary": "스트레스 상태를 반영해 자극적인 음식보다 속이 편한 식단으로 조정합니다.",
+#           "recommendations": ["맵고 기름진 음식 줄이기", "소량씩 규칙적으로 먹기"]
+#       }
+#   ],
+#   "final_summary": "오늘은 회복 중심의 식단과 가벼운 활동이 적절합니다."
+# }
+#
+# 실제 orchestrator 쪽에 넣을 수 있는 형태의 의사 코드:
+#
+# class InteractionStep(BaseModel):
+#     from_agent: str
+#     to_agent: str
+#     title: str
+#     summary: str
+#     recommendations: list[str] = []
+#
+#
+# class ChatResponse(BaseModel):
+#     routed_to: list[str]
+#     reason: str
+#     results: list[AgentResult]
+#     interaction_steps: list[InteractionStep] = []
+#     final_summary: str | None = None
+#
+#
+# def build_interaction_steps(results: list[AgentResult]):
+#     ok_results = {r.agent: r.response for r in results if r.status == "ok" and r.response}
+#     steps = []
+#
+#     mental = ok_results.get("mental")
+#     diet = ok_results.get("diet")
+#     exercise = ok_results.get("exercise")
+#
+#     # mental 응답 예시:
+#     # mental["emotions"]["primary"] == "불안"
+#     # mental["emotions"]["intensity"] == 8
+#     # mental["agent_signal"]["requires_care"] == True
+#     if mental:
+#         emotions = mental.get("emotions", {})
+#         signal = mental.get("agent_signal", {})
+#         primary = emotions.get("primary") or signal.get("primary_emotion")
+#         intensity = emotions.get("intensity") or signal.get("intensity")
+#         mental_status = f"{primary} {intensity}/10" if primary and intensity else "멘탈 상태 참고"
+#     else:
+#         mental_status = "멘탈 상태 정보 없음"
+#
+#     if mental and diet:
+#         steps.append({
+#             "from_agent": "mental",
+#             "to_agent": "diet",
+#             "title": "멘탈 상태 기반 식단 조정",
+#             "summary": f"{mental_status} 상태를 반영해 식단 추천을 균형식 중심으로 조정합니다.",
+#             "recommendations": [
+#                 "자극적인 음식보다 속이 편한 음식 우선",
+#                 "굶기보다 소량씩 규칙적으로 먹기",
+#             ],
+#         })
+#
+#     if mental and exercise:
+#         steps.append({
+#             "from_agent": "mental",
+#             "to_agent": "exercise",
+#             "title": "멘탈 상태 기반 운동 강도 조정",
+#             "summary": f"{mental_status} 상태를 반영해 고강도보다 회복형 운동을 우선합니다.",
+#             "recommendations": [
+#                 "20분 가벼운 걷기",
+#                 "목과 어깨 스트레칭",
+#             ],
+#         })
+#
+#     if exercise and diet:
+#         steps.append({
+#             "from_agent": "exercise + diet",
+#             "to_agent": "orchestrator",
+#             "title": "식단과 운동 응답 최종 조율",
+#             "summary": "식단 응답과 운동 응답을 함께 보고 사용자가 바로 실천할 수 있는 방향으로 정리합니다.",
+#             "recommendations": [
+#                 "식사는 거르지 않고 적정량 유지",
+#                 "운동은 낮은 강도부터 시작",
+#             ],
+#         })
+#
+#     final_summary = None
+#     if len(ok_results) >= 2:
+#         final_summary = "여러 에이전트 응답을 종합한 결과, 오늘은 무리한 변화보다 회복 중심 관리가 적절합니다."
+#
+#     return steps, final_summary
+#
+#
+# # orchestrator의 /chat 마지막 부분 예시:
+# results = await asyncio.gather(*[call_agent(agent, req.message) for agent in agents])
+# interaction_steps, final_summary = build_interaction_steps(list(results))
+# return ChatResponse(
+#     routed_to=agents,
+#     reason=reason,
+#     results=list(results),
+#     interaction_steps=interaction_steps,
+#     final_summary=final_summary,
+# )
 
 
 @app.get("/agent/status")

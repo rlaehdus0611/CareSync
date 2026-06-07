@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CareSync Diet Agent</title>
+  <style>
+    :root {
+      --diet: #10b981;
+      --mental: #8b5cf6;
+      --exercise: #3b82f6;
+      --ink: #172033;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --bg: #f7faf9;
+      --card: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+    .shell {
+      width: min(980px, 100%);
+      margin: 0 auto;
+      padding: 24px 18px 40px;
+    }
+    header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.45rem;
+      letter-spacing: 0;
+    }
+    .sub {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .status {
+      border: 1px solid #bbf7d0;
+      color: #047857;
+      background: #ecfdf5;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(300px, 0.82fr);
+      gap: 16px;
+      align-items: start;
+    }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 1px 5px rgba(15, 23, 42, 0.05);
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+    textarea, input, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font: inherit;
+      color: var(--ink);
+      background: #fff;
+    }
+    textarea {
+      min-height: 116px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+    textarea.question {
+      min-height: 72px;
+    }
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--diet);
+      color: #fff;
+      font-weight: 800;
+      padding: 11px 14px;
+      cursor: pointer;
+      margin-top: 12px;
+      width: 100%;
+    }
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+    .result {
+      white-space: pre-wrap;
+      line-height: 1.65;
+      border: 1px solid #ccfbf1;
+      background: #f0fdfa;
+      border-radius: 8px;
+      padding: 13px;
+      min-height: 96px;
+      color: #134e4a;
+      font-size: 0.9rem;
+    }
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .flow-card {
+      border: 1px solid #1f2937;
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 8px;
+      padding: 14px;
+      line-height: 1.6;
+    }
+    .flow-head {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 0.78rem;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+    .arrow { color: #94a3b8; }
+    .flow-title {
+      color: #a7f3d0;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .flow-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: #cbd5e1;
+    }
+    .final {
+      border-color: #bfdbfe;
+      background: #eff6ff;
+      color: #1e3a8a;
+    }
+    .final .flow-title,
+    .final .flow-head { color: #1d4ed8; }
+    .note {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      margin-top: 10px;
+    }
+    @media (max-width: 760px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .grid { grid-template-columns: 1fr; }
+      .fields { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>🥗 CareSync 식단 에이전트</h1>
+        <div class="sub">8001 포트에서 식단 응답과 통합 연동 미리보기를 확인합니다.</div>
+      </div>
+      <div class="status" id="status">상태 확인 중</div>
+    </header>
+
+    <div class="grid">
+      <section>
+        <h2>식단 단독 테스트</h2>
+        <div class="fields">
+          <div>
+            <label for="goal">목표</label>
+            <select id="goal">
+              <option value="">선택 안 함</option>
+              <option>체중 감량</option>
+              <option>체지방 감량</option>
+              <option>근육량 증가</option>
+              <option>체중 유지</option>
+            </select>
+          </div>
+          <div>
+            <label for="activity_level">활동량</label>
+            <select id="activity_level">
+              <option value="">선택 안 함</option>
+              <option>거의 운동 안 함</option>
+              <option>가벼운 활동</option>
+              <option>보통 활동</option>
+              <option>활동 많음</option>
+              <option>매우 활동적</option>
+            </select>
+          </div>
+          <div>
+            <label for="age">나이</label>
+            <input id="age" type="number" placeholder="예: 24">
+          </div>
+          <div>
+            <label for="gender">성별</label>
+            <select id="gender">
+              <option value="">선택 안 함</option>
+              <option>남성</option>
+              <option>여성</option>
+            </select>
+          </div>
+          <div>
+            <label for="height_cm">키(cm)</label>
+            <input id="height_cm" type="number" placeholder="예: 170">
+          </div>
+          <div>
+            <label for="weight_kg">몸무게(kg)</label>
+            <input id="weight_kg" type="number" placeholder="예: 65">
+          </div>
+          <div>
+            <label for="food_style">식사 형태</label>
+            <input id="food_style" placeholder="예: 한식 위주">
+          </div>
+          <div>
+            <label for="restrictions">제한 음식</label>
+            <input id="restrictions" placeholder="예: 유제품 알레르기">
+          </div>
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="content">현재 내가 먹은 음식</label>
+          <textarea id="content" placeholder="예: 아침 - 삶은 달걀 2개, 바나나 1개&#10;예: 점심 - 김치찌개, 밥 1공기"></textarea>
+        </div>
+
+        <div style="margin-top:12px">
+          <label for="question">식단 질문</label>
+          <textarea class="question" id="question" placeholder="예: 내일 아침 점심 저녁 어떻게 먹으면 좋을까?"></textarea>
+        </div>
+
+        <button id="submit" onclick="sendDiet()">식단 에이전트 호출</button>
+        <p class="note">Ollama와 모델이 켜져 있어야 실제 식단 응답이 나옵니다.</p>
+      </section>
+
+      <section>
+        <h2>응답</h2>
+        <div class="result" id="result">아직 요청 전입니다.</div>
+      </section>
+    </div>
+
+    <section style="margin-top:16px">
+      <h2>멀티 에이전트 연동 미리보기</h2>
+      <div class="flow" id="flow"></div>
+      <p class="note">이 영역은 네 담당 파일 안에 미리 준비해둔 화면입니다. 실제 통합 후에는 오케스트레이터가 멘탈/운동 응답을 모아 같은 형식으로 보여주면 됩니다.</p>
+    </section>
+  </main>
+
+  <script>
+    const FLOW_LABELS = {
+      mental: "🧠 멘탈 에이전트",
+      diet: "🥗 식단 에이전트",
+      exercise: "💪 운동 에이전트",
+      orchestrator: "🔀 오케스트레이터",
+      "exercise + diet": "💪 운동 에이전트 + 🥗 식단 에이전트",
+      "diet + exercise": "🥗 식단 에이전트 + 💪 운동 에이전트"
+    };
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      }[ch]));
+    }
+
+    function optionalValue(id, numeric = false) {
+      const raw = document.getElementById(id).value.trim();
+      if (!raw) return undefined;
+      return numeric ? Number(raw) : raw;
+    }
+
+    async function loadStatus() {
+      try {
+        const res = await fetch("/agent/status");
+        const data = await res.json();
+        document.getElementById("status").textContent = `${data.agent} · ${data.status}`;
+      } catch {
+        document.getElementById("status").textContent = "상태 확인 실패";
+      }
+    }
+
+    async function sendDiet() {
+      const btn = document.getElementById("submit");
+      const result = document.getElementById("result");
+      const dietLog = document.getElementById("content").value.trim();
+      const question = document.getElementById("question").value.trim();
+      const content = [
+        dietLog ? `현재 내가 먹은 음식:\n${dietLog}` : "",
+        question ? `식단 질문:\n${question}` : ""
+      ].filter(Boolean).join("\n\n");
+      const payload = {
+        content,
+        age: optionalValue("age", true),
+        gender: optionalValue("gender"),
+        height_cm: optionalValue("height_cm", true),
+        weight_kg: optionalValue("weight_kg", true),
+        goal: optionalValue("goal"),
+        activity_level: optionalValue("activity_level"),
+        food_style: optionalValue("food_style"),
+        restrictions: optionalValue("restrictions")
+      };
+
+      if (!payload.content) {
+        result.textContent = "현재 먹은 음식이나 식단 질문을 입력해 주세요.";
+        return;
+      }
+
+      Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+      btn.disabled = true;
+      result.textContent = "식단 에이전트가 답변을 준비 중입니다...";
+
+      try {
+        const res = await fetch("/diet", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        result.textContent = data.response || JSON.stringify(data, null, 2);
+      } catch (error) {
+        result.textContent = "요청 중 오류가 발생했습니다. Ollama 실행 상태와 서버 로그를 확인해 주세요.";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function loadPreview() {
+      const flow = document.getElementById("flow");
+      try {
+        const res = await fetch("/interaction-preview");
+        const data = await res.json();
+        flow.innerHTML = data.steps.map(step => {
+          const recs = (step.recommendations || []).map(item => `<li>${esc(item)}</li>`).join("");
+          return `<div class="flow-card">
+            <div class="flow-head">
+              <span>${FLOW_LABELS[step.from_agent] || esc(step.from_agent)}</span>
+              <span class="arrow">→</span>
+              <span>${FLOW_LABELS[step.to_agent] || esc(step.to_agent)}</span>
+            </div>
+            <div class="flow-title">${esc(step.title)}</div>
+            <div>${esc(step.summary)}</div>
+            ${recs ? `<ul>${recs}</ul>` : ""}
+          </div>`;
+        }).join("") + `<div class="flow-card final">
+          <div class="flow-head">🔀 오케스트레이터</div>
+          <div class="flow-title">최종 조율 결과</div>
+          <div>${esc(data.final_summary)}</div>
+        </div>`;
+      } catch {
+        flow.innerHTML = `<div class="flow-card">미리보기 데이터를 불러오지 못했습니다.</div>`;
+      }
+    }
+
+    loadStatus();
+    loadPreview();
+  </script>
+</body>
+</html>
