@@ -154,19 +154,43 @@ async def chat_stream(req: ChatRequest):
         yield sse("step", {"from": "🤖 오케스트레이터", "msg": f"**{agent_names}** 에이전트에게 전달할게요.\n이유: {reason}", "type": "routing"})
         await asyncio.sleep(0.2)
 
-        # 3. 각 에이전트 호출 & 응답 스트리밍
+        # 3. 에이전트 순차 호출 — 멘탈 먼저, 결과를 다음 에이전트에 전달
         user_info = req.model_dump(exclude={"message", "force_agent"}, exclude_unset=True)
         results = []
+        mental_signal = None  # 멘탈 에이전트의 신호 (다른 에이전트에게 전달)
 
-        for agent in agents:
+        # 멘탈을 항상 먼저 실행하도록 정렬
+        ordered = sorted(agents, key=lambda a: 0 if a == "mental" else 1)
+
+        for agent in ordered:
             label = AGENT_KO.get(agent, agent)
             yield sse("step", {"from": f"{label} 에이전트", "msg": "분석 중이에요...", "type": "thinking", "agent": agent})
+
+            # 핵심: 멘탈 신호를 식단·운동 에이전트에 전달 (이 한 줄이 에이전트 간 대화를 만듦)
+            if agent != "mental" and mental_signal:
+                user_info["mental_status"] = mental_signal  # ← 교수님이 말씀하신 한 줄
 
             result = await call_agent(agent, req.message, user_info)
             results.append(result)
 
             if result.status == "ok" and result.response:
                 resp = result.response
+
+                # 멘탈 에이전트 신호 추출 → 다음 에이전트에게 전달
+                if agent == "mental" and resp.get("agent_signal"):
+                    mental_signal = resp["agent_signal"]
+                    emotion   = mental_signal.get("primary_emotion", "")
+                    intensity = mental_signal.get("intensity", "")
+                    # 멘탈 → 다른 에이전트에게 신호 전달 표시
+                    if len(ordered) > 1:
+                        others = ", ".join(AGENT_KO.get(a, a) for a in ordered if a != "mental")
+                        yield sse("step", {
+                            "from": "🧠 멘탈 에이전트 → 전달",
+                            "msg": f"**{others}** 에이전트에게 감정 신호를 전달해요.\n감정: {emotion} / 강도: {intensity}/10",
+                            "type": "routing", "agent": "mental"
+                        })
+                        await asyncio.sleep(0.2)
+
                 preview = resp.get("response") or resp.get("empathy_response") or "응답 완료"
                 if len(preview) > 80:
                     preview = preview[:80] + "..."
