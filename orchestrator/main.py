@@ -3,6 +3,7 @@
 입력 하나로 식단 / 운동 / 멘탈 에이전트를 라우팅하고 통합 응답 반환
 """
 import asyncio
+import json
 import os
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -10,9 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import httpx
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from router import classify_intent
@@ -122,6 +123,78 @@ async def chat(req: ChatRequest):
     ])
 
     return ChatResponse(routed_to=agents, reason=reason, results=list(results))
+
+
+@app.post("/chat/stream")
+async def chat_stream(req: ChatRequest):
+    """
+    멀티에이전트 대화 과정을 SSE로 실시간 스트리밍
+    각 단계마다 이벤트를 보내 UI에서 대화 형태로 보여줌
+    """
+    AGENT_KO = {"mental": "🧠 멘탈", "diet": "🥗 식단", "exercise": "💪 운동"}
+
+    async def event_generator():
+        def sse(event: str, data: dict) -> str:
+            return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        # 1. 오케스트레이터 분석 시작
+        yield sse("step", {"from": "🤖 오케스트레이터", "msg": "입력을 분석하고 있어요...", "type": "thinking"})
+        await asyncio.sleep(0.3)
+
+        # 2. 라우팅 결정
+        if req.force_agent and req.force_agent in AGENT_URLS:
+            agents = [req.force_agent]
+            reason = f"{req.force_agent} 에이전트 직접 선택"
+        else:
+            routing = await classify_intent(req.message)
+            agents  = routing.get("agents", ["mental"])
+            reason  = routing.get("reason", "")
+
+        agent_names = ", ".join(AGENT_KO.get(a, a) for a in agents)
+        yield sse("step", {"from": "🤖 오케스트레이터", "msg": f"**{agent_names}** 에이전트에게 전달할게요.\n이유: {reason}", "type": "routing"})
+        await asyncio.sleep(0.2)
+
+        # 3. 각 에이전트 호출 & 응답 스트리밍
+        user_info = req.model_dump(exclude={"message", "force_agent"}, exclude_unset=True)
+        results = []
+
+        for agent in agents:
+            label = AGENT_KO.get(agent, agent)
+            yield sse("step", {"from": f"{label} 에이전트", "msg": "분석 중이에요...", "type": "thinking", "agent": agent})
+
+            result = await call_agent(agent, req.message, user_info)
+            results.append(result)
+
+            if result.status == "ok" and result.response:
+                resp = result.response
+                preview = resp.get("response") or resp.get("empathy_response") or "응답 완료"
+                if len(preview) > 80:
+                    preview = preview[:80] + "..."
+                yield sse("step", {"from": f"{label} 에이전트", "msg": preview, "type": "response", "agent": agent})
+            else:
+                yield sse("step", {"from": f"{label} 에이전트", "msg": f"⚠️ {result.error or '응답 없음'}", "type": "error", "agent": agent})
+
+            await asyncio.sleep(0.1)
+
+        # 4. 오케스트레이터 최종 종합
+        yield sse("step", {"from": "🤖 오케스트레이터", "msg": "모든 에이전트 응답을 종합했어요 ✅", "type": "done"})
+
+        # 5. 최종 결과 전송
+        final = {
+            "routed_to": agents,
+            "reason": reason,
+            "results": [r.model_dump() for r in results]
+        }
+        yield sse("done", final)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @app.get("/agents/health")

@@ -332,6 +332,40 @@
       cursor: pointer;
     }
 
+    /* ── 에이전트 대화 말풍선 ── */
+    .agent-dialog {
+      display: flex; flex-direction: column; gap: 0.5rem;
+      background: #f1f5f9; border-radius: 16px;
+      padding: 0.8rem 1rem; margin: 0.3rem 0;
+      border-left: 3px solid #8b5cf6;
+      animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .agent-dialog-title {
+      font-size: 0.72rem; font-weight: 700; color: #64748b;
+      display: flex; align-items: center; gap: 0.3rem;
+    }
+    .agent-dialog-step {
+      display: flex; align-items: flex-start; gap: 0.5rem;
+      padding: 0.4rem 0; border-bottom: 1px solid #e2e8f0;
+      animation: fadeIn 0.25s ease;
+    }
+    .agent-dialog-step:last-child { border-bottom: none; }
+    .agent-step-from {
+      font-size: 0.72rem; font-weight: 700; white-space: nowrap;
+      padding: 0.15rem 0.5rem; border-radius: 20px; flex-shrink: 0;
+    }
+    .agent-step-from.mental   { background: #ede9fe; color: #7c3aed; }
+    .agent-step-from.diet     { background: #d1fae5; color: #059669; }
+    .agent-step-from.exercise { background: #dbeafe; color: #2563eb; }
+    .agent-step-from.system   { background: #f1f5f9; color: #475569; }
+    .agent-step-msg {
+      font-size: 0.82rem; color: #334155; line-height: 1.5; flex: 1;
+    }
+    .step-thinking { color: #94a3b8; font-style: italic; }
+    .step-routing  { color: #7c3aed; }
+    .step-done     { color: #059669; }
+
     /* ── 토스트 알림 ── */
     .toast {
       position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
@@ -623,10 +657,12 @@ async function sendMessage() {
   document.getElementById('sendBtn').disabled = true;
 
   appendUserBubble(msg);
-  const loadEl = appendTyping();
+
+  // 에이전트 대화 패널 생성
+  const dialogEl = appendAgentDialog();
 
   try {
-    const body = { 
+    const body = {
       message: msg,
       age: parseInt(document.getElementById('p-age').value) || null,
       gender: document.getElementById('p-gender').value || null,
@@ -639,20 +675,84 @@ async function sendMessage() {
     };
     if (selectedAgent !== 'all') body.force_agent = selectedAgent;
 
-    const res  = await fetch('/chat', {
-      method:'POST', headers:{'Content-Type':'application/json'},
+    const res = await fetch('/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
-    const data = await res.json();
-    loadEl.remove();
-    renderChatResult(data);
-    loadDashboard();
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        let eventType = 'message', eventData = '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+          if (line.startsWith('data: '))  eventData = line.slice(6).trim();
+        }
+        if (!eventData) continue;
+
+        try {
+          const data = JSON.parse(eventData);
+          if (eventType === 'step') {
+            addDialogStep(dialogEl, data);
+          } else if (eventType === 'done') {
+            dialogEl.querySelector('.agent-dialog-title').textContent = '✅ 멀티에이전트 처리 완료';
+            renderChatResult(data);
+            loadDashboard();
+          }
+        } catch(e) {}
+      }
+    }
   } catch(e) {
-    loadEl.remove();
     appendAiBubble('서버 연결 오류가 발생했어요 😢');
   } finally {
     document.getElementById('sendBtn').disabled = false;
   }
+}
+
+function appendAgentDialog() {
+  const box = document.getElementById('chatBox');
+  const wrap = document.createElement('div');
+  wrap.className = 'msg-wrap ai';
+  wrap.innerHTML = `
+    <div class="agent-dialog">
+      <div class="agent-dialog-title">🤝 에이전트 협업 중...</div>
+      <div class="agent-dialog-steps"></div>
+    </div>`;
+  box.appendChild(wrap);
+  scrollBottom();
+  return wrap.querySelector('.agent-dialog');
+}
+
+function addDialogStep(dialogEl, data) {
+  const steps = dialogEl.querySelector('.agent-dialog-steps');
+  const step  = document.createElement('div');
+  step.className = 'agent-dialog-step';
+
+  const agentClass = data.agent || 'system';
+  const typeClass  = data.type === 'thinking' ? 'step-thinking'
+                   : data.type === 'routing'  ? 'step-routing'
+                   : data.type === 'done'     ? 'step-done' : '';
+
+  // 마크다운 굵기 처리 (**text**)
+  const msg = (data.msg || '').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  step.innerHTML = `
+    <span class="agent-step-from ${agentClass}">${esc(data.from || '')}</span>
+    <span class="agent-step-msg ${typeClass}">${msg}</span>`;
+  steps.appendChild(step);
+  scrollBottom();
 }
 
 function appendUserBubble(msg) {
