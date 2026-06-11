@@ -5,6 +5,7 @@
 import asyncio
 import json
 import os
+import re
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 
@@ -47,6 +48,98 @@ app = FastAPI(title="헬스케어 AI 오케스트레이터", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
+def _short_text(text: str, limit: int = 95) -> str:
+    text = " ".join(str(text or "").split())
+    return text[:limit] + "..." if len(text) > limit else text
+
+
+def _clean_generated_text(text: str) -> str:
+    """Remove accidental non-Korean CJK glyphs that local LLMs sometimes mix into Korean."""
+    text = str(text or "").replace("`", "")
+    text = re.sub(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF]+", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" +([,.!?。！？])", r"\1", text)
+    return text.strip()
+
+
+def _sanitize_agent_payload(value):
+    if isinstance(value, str):
+        return _clean_generated_text(value)
+    if isinstance(value, list):
+        return [_sanitize_agent_payload(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_agent_payload(item) for key, item in value.items()}
+    return value
+
+
+def _mental_signal_label(signal: dict | None) -> str:
+    if not signal:
+        return "멘탈 상태 정보 없음"
+    emotion = signal.get("primary_emotion") or signal.get("primary") or "감정"
+    intensity = signal.get("intensity")
+    care = "주의 필요" if signal.get("requires_care") else "일반 관리"
+    return f"{emotion} / 강도 {intensity}/10 / {care}" if intensity else f"{emotion} / {care}"
+
+
+def _build_synthesis(results: list["AgentResult"]) -> str:
+    ok = {r.agent: r.response for r in results if r.status == "ok" and r.response}
+    parts = []
+    if "mental" in ok:
+        signal = ok["mental"].get("agent_signal")
+        parts.append(f"멘탈 상태는 {_mental_signal_label(signal)}로 확인했어요.")
+    if "diet" in ok:
+        parts.append("식단 쪽에서는 폭식/식사 입력을 기준으로 무리한 제한보다 회복 가능한 식사 방향을 우선했어요.")
+    if "exercise" in ok:
+        exercise_signal = ok["exercise"].get("agent_signal", {})
+        intensity = exercise_signal.get("intensity") or ok["exercise"].get("intensity")
+        parts.append(f"운동 쪽에서는 현재 상태에 맞춰 {intensity or '가벼운'} 강도의 활동을 권장했어요.")
+    if len(ok) >= 2:
+        parts.append("그래서 최종 답변은 식단 조절과 가벼운 움직임을 함께 제안하는 방향으로 정리했어요.")
+    return "\n".join(f"- {part}" for part in parts) if parts else "응답 가능한 에이전트 결과가 없어 최종 종합을 만들지 못했어요."
+
+
+def _dialogue_mental_to_diet(signal: dict | None) -> str:
+    emotion_note = _mental_signal_label(signal)
+    return (
+        f"멘탈: 현재 감정 신호는 {emotion_note}예요. "
+        "식단 쪽에서는 오늘을 벌주는 제한식보다 속이 편하고 회복 가능한 식사 방향으로 봐주세요."
+    )
+
+
+def _dialogue_mental_to_exercise(signal: dict | None) -> str:
+    emotion_note = _mental_signal_label(signal)
+    return (
+        f"멘탈: 현재 감정 신호는 {emotion_note}예요. "
+        "운동 쪽에서는 강하게 몰아붙이기보다 산책, 스트레칭처럼 긴장을 낮추는 루틴으로 맞춰주세요."
+    )
+
+
+def _dialogue_diet_to_exercise(diet_context: str | None) -> str:
+    context = f" 식단 판단 요약은 '{diet_context}'입니다." if diet_context else ""
+    return (
+        "식단: 폭식이나 과식 뒤에는 칼로리를 벌충하려는 운동보다 소화와 컨디션 회복이 먼저예요."
+        f"{context} 운동 쪽에서 가벼운 움직임으로 이어주세요."
+    )
+
+
+def _build_synthesis_dialogue(results: list["AgentResult"]) -> str:
+    ok = {r.agent: r.response for r in results if r.status == "ok" and r.response}
+    lines = []
+    if "mental" in ok:
+        lines.append(f"멘탈: 감정 상태는 {_mental_signal_label(ok['mental'].get('agent_signal'))}로 확인했어요.")
+    if "diet" in ok:
+        lines.append("식단: 그래서 식사는 자책성 제한보다 속이 편한 회복 식사로 정리하는 게 좋아 보여요.")
+    if "exercise" in ok:
+        exercise_signal = ok["exercise"].get("agent_signal", {})
+        intensity = exercise_signal.get("intensity") or ok["exercise"].get("intensity") or "low"
+        lines.append(f"운동: 현재 상태에는 {intensity} 강도의 가벼운 움직임을 우선 추천할게요.")
+    if len(ok) >= 2:
+        lines.append("오케스트레이터: 세 의견을 합쳐 식단 조절과 가벼운 움직임을 함께 제안하는 결론으로 정리했어요.")
+    if not lines:
+        return "결론 도출 대화\n오케스트레이터: 응답 가능한 에이전트 결과가 없어 최종 종합을 만들지 못했어요."
+    return "결론 도출 대화\n" + "\n".join(f"- {line}" for line in lines)
+
+
 # ── 스키마 ────────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
@@ -85,10 +178,10 @@ async def call_agent(agent: str, message: str, user_info: dict | None = None) ->
         payload.update(user_info)
 
     try:
-        async with httpx.AsyncClient(timeout=90.0) as client:
+        async with httpx.AsyncClient(timeout=240.0) as client:
             res = await client.post(url, json=payload)
             res.raise_for_status()
-            return AgentResult(agent=agent, status="ok", response=res.json())
+            return AgentResult(agent=agent, status="ok", response=_sanitize_agent_payload(res.json()))
     except httpx.ConnectError:
         return AgentResult(agent=agent, status="unavailable",
                            error=f"{agent} 에이전트 서버에 연결할 수 없어요.")
@@ -158,6 +251,7 @@ async def chat_stream(req: ChatRequest):
         user_info = req.model_dump(exclude={"message", "force_agent"}, exclude_unset=True)
         results = []
         mental_signal = None  # 멘탈 에이전트의 신호 (다른 에이전트에게 전달)
+        diet_context = None
 
         # 멘탈을 항상 먼저 실행하도록 정렬
         ordered = sorted(agents, key=lambda a: 0 if a == "mental" else 1)
@@ -169,6 +263,31 @@ async def chat_stream(req: ChatRequest):
             # 핵심: 멘탈 신호를 식단·운동 에이전트에 전달 (이 한 줄이 에이전트 간 대화를 만듦)
             if agent != "mental" and mental_signal:
                 user_info["mental_status"] = mental_signal  # ← 교수님이 말씀하신 한 줄
+                if agent == "diet":
+                    yield sse("step", {
+                        "from": "🧠 멘탈 → 🥗 식단",
+                        "msg": _dialogue_mental_to_diet(mental_signal),
+                        "type": "routing",
+                        "agent": "mental"
+                    })
+                elif agent == "exercise":
+                    yield sse("step", {
+                        "from": "🧠 멘탈 → 💪 운동",
+                        "msg": _dialogue_mental_to_exercise(mental_signal),
+                        "type": "routing",
+                        "agent": "mental"
+                    })
+                await asyncio.sleep(0.2)
+
+            if agent == "exercise" and diet_context:
+                user_info["diet_context"] = diet_context
+                yield sse("step", {
+                    "from": "🥗 식단 → 💪 운동",
+                    "msg": _dialogue_diet_to_exercise(diet_context),
+                    "type": "routing",
+                    "agent": "diet"
+                })
+                await asyncio.sleep(0.2)
 
             result = await call_agent(agent, req.message, user_info)
             results.append(result)
@@ -195,12 +314,21 @@ async def chat_stream(req: ChatRequest):
                 if len(preview) > 80:
                     preview = preview[:80] + "..."
                 yield sse("step", {"from": f"{label} 에이전트", "msg": preview, "type": "response", "agent": agent})
+                if agent == "diet":
+                    diet_context = _short_text(resp.get("response") or resp.get("recommendation") or "", 180)
             else:
                 yield sse("step", {"from": f"{label} 에이전트", "msg": f"⚠️ {result.error or '응답 없음'}", "type": "error", "agent": agent})
 
             await asyncio.sleep(0.1)
 
         # 4. 오케스트레이터 최종 종합
+        yield sse("step", {
+            "from": "🤖 오케스트레이터",
+            "msg": _build_synthesis_dialogue(results),
+            "type": "routing",
+            "agent": "system"
+        })
+        await asyncio.sleep(0.2)
         yield sse("step", {"from": "🤖 오케스트레이터", "msg": "모든 에이전트 응답을 종합했어요 ✅", "type": "done"})
 
         # 5. 최종 결과 전송

@@ -19,6 +19,25 @@ EMPATHY_MODEL  = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 
 _client = ollama.AsyncClient(host=OLLAMA_HOST)
 
+
+def clean_generated_text(text: str) -> str:
+    """Local LLMs can occasionally mix Chinese/Japanese glyphs into Korean output."""
+    text = str(text or "").replace("`", "")
+    text = re.sub(r"[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u3040-\u30FF]+", "", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" +([,.!?。！？])", r"\1", text)
+    return text.strip()
+
+
+def sanitize_generated_payload(value):
+    if isinstance(value, str):
+        return clean_generated_text(value)
+    if isinstance(value, list):
+        return [sanitize_generated_payload(item) for item in value]
+    if isinstance(value, dict):
+        return {key: sanitize_generated_payload(item) for key, item in value.items()}
+    return value
+
 # ── 1. Few-shot + CoT 감정 분석 프롬프트 ─────────────────────────────
 
 ANALYSIS_SYSTEM = """당신은 심리상담 전문 AI입니다. 사용자의 일기를 읽고 감정을 분석합니다. 모든 분석 결과(추론 과정 포함)는 반드시 한국어(KOREAN)로만 작성하세요. 중국어, 한자, 영어 등 다른 언어는 절대 사용하지 마세요.
@@ -114,12 +133,12 @@ async def analyze_emotions(journal_text: str, preprocess_hint: str = "") -> dict
             {"role": "system", "content": ANALYSIS_SYSTEM},
             {"role": "user",   "content": user_content},
         ],
-        options={"temperature": 0.2},
+        options={"temperature": 0.2, "num_predict": 300},
         format="json",
     )
     raw = response.message.content.strip()
     json_match = re.search(r'\{.*\}', raw, re.DOTALL)
-    return json.loads(json_match.group() if json_match else raw)
+    return sanitize_generated_payload(json.loads(json_match.group() if json_match else raw))
 
 
 async def generate_empathy_response(
@@ -144,9 +163,9 @@ async def generate_empathy_response(
             {"role": "system", "content": EMPATHY_SYSTEM},
             {"role": "user",   "content": "\n\n".join(parts)},
         ],
-        options={"temperature": 0.7},
+        options={"temperature": 0.7, "num_predict": 180},
     )
-    return response.message.content.strip()
+    return clean_generated_text(response.message.content)
 
 
 async def generate_crisis_response(journal_text: str) -> str:
@@ -156,9 +175,9 @@ async def generate_crisis_response(journal_text: str) -> str:
             {"role": "system", "content": CRISIS_SYSTEM},
             {"role": "user",   "content": journal_text},
         ],
-        options={"temperature": 0.5},
+        options={"temperature": 0.5, "num_predict": 220},
     )
-    return response.message.content.strip()
+    return clean_generated_text(response.message.content)
 
 
 def build_rag_context(past_entries: list[dict]) -> str:
