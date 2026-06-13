@@ -19,12 +19,13 @@ async def send_kakao(message: str) -> bool:
         return False
 
     # 카카오 텍스트 메시지 템플릿
+    import json
     payload = {
-        "template_object": (
-            '{"object_type":"text",'
-            f'"text":{repr(message)},'
-            '"link":{"web_url":"","mobile_web_url":""}}'
-        )
+        "template_object": json.dumps({
+            "object_type": "text",
+            "text": message,
+            "link": {"web_url": "", "mobile_web_url": ""}
+        }, ensure_ascii=False)
     }
 
     async with httpx.AsyncClient(timeout=10.0) as client:

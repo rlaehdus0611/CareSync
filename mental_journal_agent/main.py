@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import FastAPI, HTTPException
@@ -15,12 +17,24 @@ from pydantic import BaseModel
 
 from agent import process_journal
 from database import init_db, save_entry, get_entries, get_emotion_trend, get_recent_for_rag, delete_entry
+from report_generator import generate_daily_report
+from kakao_sender import send_kakao
 
+
+scheduler = AsyncIOScheduler()
+
+async def _scheduled_report():
+    report = await generate_daily_report()
+    await send_kakao(report)
+    print("[스케줄러] 카카오톡 리포트 전송 완료")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    scheduler.add_job(_scheduled_report, "cron", hour=23, minute=0, misfire_grace_time=600)
+    scheduler.start()
     yield
+    scheduler.shutdown()
 
 
 app = FastAPI(title="멘탈 저널링 에이전트", lifespan=lifespan)
@@ -140,6 +154,14 @@ async def agent_status():
             "recorded_at": latest["created_at"]
         }
     }
+
+
+@app.post("/report/send")
+async def send_report():
+    """일일 건강 리포트 생성 후 카카오톡으로 전송."""
+    report = await generate_daily_report()
+    success = await send_kakao(report)
+    return {"status": "ok" if success else "error", "report": report}
 
 
 if __name__ == "__main__":

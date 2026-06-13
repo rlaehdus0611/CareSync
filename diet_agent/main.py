@@ -8,9 +8,14 @@ import sqlite3
 from datetime import datetime
 from contextlib import asynccontextmanager
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
-MODEL_NAME = os.getenv("OLLAMA_MODEL", "gemma3:4b")
+MODEL_NAME = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
 DB_PATH = os.path.join(os.path.dirname(__file__), "diet_history.db")
 
 # ── 데이터베이스 로직 ──────────────────────────────────────────────

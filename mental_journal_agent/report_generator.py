@@ -9,7 +9,7 @@ import httpx
 from datetime import datetime, date
 
 import ollama
-from database import get_entries, get_emotion_delta
+from database import get_entries, get_emotion_trend
 
 OLLAMA_HOST  = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 REPORT_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
@@ -62,7 +62,7 @@ async def collect_today_data() -> dict:
     # 멘탈 — 로컬 DB에서 오늘 항목 직접 조회
     all_entries = await get_entries(limit=20)
     today_mental = [e for e in all_entries if e["created_at"].startswith(today)]
-    delta = await get_emotion_delta(days=7)
+    delta = await get_emotion_trend(days=7)
 
     # 식단·운동 — 에이전트 상태 API 조회
     diet_status     = await _fetch_agent_status(DIET_AGENT_URL,     "식단")
@@ -90,10 +90,9 @@ def _build_report_prompt(data: dict) -> str:
         lines.append(f"오늘 일기 수: {len(mental_entries)}개")
         lines.append(f"감정 목록: {', '.join(emotions)}")
         lines.append(f"평균 감정 강도: {avg_intensity:.1f}/10")
-        delta = data["delta"]
-        if delta.get("trend") != "no_data":
-            trend_map = {"worsening": "악화 중", "improving": "개선 중", "stable": "안정"}
-            lines.append(f"7일 추세: {trend_map.get(delta['trend'], '')} (변화량 {delta.get('delta', 0):+.1f})")
+        trend_data = data["delta"]
+        if trend_data:
+            lines.append(f"7일 감정 기록 수: {len(trend_data)}개")
         # 마지막 일기 공감 요약
         if mental_entries:
             lines.append(f"오늘의 핵심 키워드: {', '.join(mental_entries[-1].get('keywords', []))}")

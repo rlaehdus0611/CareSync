@@ -64,7 +64,11 @@ ANALYSIS_SYSTEM = """당신은 심리상담 전문 AI입니다. 사용자의 일
 - JSON만 출력, 다른 텍스트 절대 금지
 - primary_emotion: 기쁨/슬픔/불안/분노/무기력/외로움/평온/혼란 중 하나
 - intensity: 1(매우 잔잔) ~ 10(극도로 강렬)
-- 모든 텍스트 필드(keywords, summary 등)는 반드시 한국어로 작성하며, 중국어나 영어를 절대 섞지 마세요."""
+- 모든 텍스트 필드(keywords, summary 등)는 반드시 한국어로 작성하며, 중국어나 영어를 절대 섞지 마세요.
+
+[최종 경고 — 언어 규칙]
+출력에 한글이 아닌 문자(中文, 漢字, alphabet 등)가 단 한 글자라도 포함되면 오답입니다.
+반드시 한국어(한글)로만 출력하세요."""
 
 # ── 2. 공감 응답 프롬프트 ────────────────────────────────────────────
 
@@ -84,7 +88,10 @@ EMPATHY_SYSTEM = """당신은 따뜻하고 공감적인 멘탈 헬스케어 상�
 - "괜찮아질 거예요" 같은 근거 없는 위로 금지
 - 감정을 바꾸거나 부정하지 말 것
 - 과거 패턴이 주어지면 반드시 연속성 있게 언급
-- 중국어(간체/번체), 한자, 영어 등 외국어를 절대 섞지 마세요."""
+- 중국어(간체/번체), 한자, 영어 등 외국어를 절대 섞지 마세요.
+
+[최종 경고 — 언어 규칙]
+출력에 한글이 아닌 문자가 단 한 글자라도 포함되면 오답입니다. 반드시 한국어(한글)로만 출력하세요."""
 
 # ── 3. 위기 응답 프롬프트 ────────────────────────────────────────────
 
@@ -105,8 +112,8 @@ CRISIS_SYSTEM = """당신은 위기 상담 전문 AI입니다.
 
 async def analyze_emotions(journal_text: str, preprocess_hint: str = "") -> dict:
     user_content = (
-        f"[형태소 분석 힌트]\n{preprocess_hint}\n\n[일기]\n{journal_text}"
-        if preprocess_hint else f"[일기]\n{journal_text}"
+        f"[언어 규칙: 반드시 한국어(한글)로만 출력]\n\n[형태소 분석 힌트]\n{preprocess_hint}\n\n[일기]\n{journal_text}"
+        if preprocess_hint else f"[언어 규칙: 반드시 한국어(한글)로만 출력]\n\n[일기]\n{journal_text}"
     )
     response = await _client.chat(
         model=ANALYSIS_MODEL,
